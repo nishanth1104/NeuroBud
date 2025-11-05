@@ -1,0 +1,27 @@
+# Web Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Database
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.23
+
+# OpenAI
+openai==1.3.5
+
+# Environment Variables
+python-dotenv==1.0.0
+
+# CORS
+fastapi-cors==0.0.6
+
+# Validation
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# HTTP Requests (for future use)
+httpx==0.25.2
+
+# Utilities
+#tiktoken==0.5.1
