@@ -9,7 +9,9 @@ export default function MoodPage() {
   const [note, setNote] = useState('')
   const [history, setHistory] = useState([])
   const [isLoading, setIsLoading] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(true)
   const [justLogged, setJustLogged] = useState(false)
+  const [error, setError] = useState(null)
 
   // Load mood history on page load
   useEffect(() => {
@@ -17,16 +19,21 @@ export default function MoodPage() {
   }, [])
 
   const loadMoodHistory = async () => {
+    setHistoryLoading(true)
     try {
       const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/mood/history?days=7`)
       setHistory(response.data.entries)
     } catch (error) {
       console.error('Error loading mood history:', error)
+    } finally {
+      setHistoryLoading(false)
     }
   }
 
   const logMood = async () => {
     setIsLoading(true)
+    setError(null)
+    
     try {
       await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/mood`, {
         mood_score: moodScore,
@@ -37,11 +44,19 @@ export default function MoodPage() {
       setNote('')
       setTimeout(() => setJustLogged(false), 3000)
       
-      // Reload history
       loadMoodHistory()
     } catch (error) {
       console.error('Error logging mood:', error)
-      alert('Failed to log mood. Please try again.')
+      
+      let errorMessage = 'Failed to log mood. Please try again.'
+      
+      if (error.response?.status === 429) {
+        errorMessage = 'Too many requests. Please wait a moment.'
+      } else if (error.response?.status === 400) {
+        errorMessage = error.response.data?.detail || errorMessage
+      }
+      
+      setError(errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -103,8 +118,18 @@ export default function MoodPage() {
 
         {/* Mood Logger Card */}
         <div className="bg-white rounded-2xl shadow-lg p-8 mb-8">
+          {/* Error Message */}
+          {error && (
+            <div className="mb-6 bg-red-50 border-2 border-red-300 rounded-xl px-4 py-3 animate-fade-in">
+              <p className="text-red-800 font-semibold text-center flex items-center justify-center gap-2">
+                <span className="text-2xl">❌</span>
+                {error}
+              </p>
+            </div>
+          )}
+
           {/* Success Message */}
-          {justLogged && (
+          {justLogged && !error && (
             <div className="mb-6 bg-green-50 border-2 border-green-300 rounded-xl px-4 py-3 animate-fade-in">
               <p className="text-green-800 font-semibold text-center flex items-center justify-center gap-2">
                 <span className="text-2xl">✅</span>
@@ -158,7 +183,11 @@ export default function MoodPage() {
               placeholder="e.g., Had a good workout, stressed about deadline, feeling lonely..."
               className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
               rows={3}
+              maxLength={500}
             />
+            <div className="text-xs text-gray-500 mt-1 text-right">
+              {note.length}/500
+            </div>
           </div>
 
           {/* Log Button */}
@@ -175,7 +204,22 @@ export default function MoodPage() {
         <div className="bg-white rounded-2xl shadow-lg p-8">
           <h2 className="text-2xl font-bold text-gray-800 mb-6">Recent Mood History (7 Days)</h2>
           
-          {history.length === 0 ? (
+          {historyLoading ? (
+            // Loading skeleton
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="border-2 border-gray-200 rounded-xl p-4 animate-pulse">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-gray-200 rounded-full"></div>
+                    <div className="flex-1">
+                      <div className="h-4 bg-gray-200 rounded w-32 mb-2"></div>
+                      <div className="h-3 bg-gray-200 rounded w-48"></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : history.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
               <div className="text-5xl mb-4">📊</div>
               <p className="text-lg">No mood entries yet.</p>

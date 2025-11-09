@@ -5,7 +5,9 @@
       "Bash(git remote set-url:*)",
       "Bash(git config:*)",
       "Bash(git credential-manager:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\n🎉 Day 2 Complete: Enhanced UI/UX with Animations and Responsive Design\n\nAdded smooth animations, improved chat interface with better empty state, enhanced typing indicators, and responsive mobile-friendly layout. Configured Tailwind CSS properly and added global styles for better user experience.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(rm:*)"
     ],
     "deny": [],
     "ask": []

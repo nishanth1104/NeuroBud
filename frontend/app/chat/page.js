@@ -9,6 +9,10 @@ export default function ChatPage() {
   const [input, setInput] = useState('')
   const [conversationId, setConversationId] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [isOffline, setIsOffline] = useState(false)
+  const [messageCount, setMessageCount] = useState(0)
+  const [showBreakReminder, setShowBreakReminder] = useState(false)
   const messagesEndRef = useRef(null)
 
   // Auto-scroll to bottom
@@ -20,29 +24,98 @@ export default function ChatPage() {
     scrollToBottom()
   }, [messages])
 
+  // Detect online/offline status
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOffline(false)
+      setError(null)
+    }
+    
+    const handleOffline = () => {
+      setIsOffline(true)
+      setError('You are offline. Messages will not be sent until you reconnect.')
+    }
+    
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    
+    // Check initial status
+    if (!navigator.onLine) {
+      handleOffline()
+    }
+    
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
+  const copyMessage = (content) => {
+    navigator.clipboard.writeText(content)
+  }
+
+  const sendMessageWithRetry = async (userMessage, retries = 3) => {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const response = await axios.post(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/chat`,
+          {
+            message: userMessage,
+            conversation_id: conversationId
+          },
+          {
+            timeout: 30000
+          }
+        )
+        return response
+      } catch (error) {
+        if (attempt === retries) {
+          throw error
+        }
+        
+        // Wait before retry (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+      }
+    }
+  }
+
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return
+    
+    // Validation
+    if (input.trim().length > 2000) {
+      setError('Message too long (max 2000 characters)')
+      return
+    }
+    
+    if (input.trim().length < 2) {
+      setError('Message too short (min 2 characters)')
+      return
+    }
 
     const userMessage = input.trim()
     setInput('')
     setIsLoading(true)
+    setError(null)
 
-    // Add user message to UI
     setMessages(prev => [...prev, { role: 'user', content: userMessage }])
+    
+    const newCount = messageCount + 1
+    setMessageCount(newCount)
+    
+    if (newCount === 15) {
+      setShowBreakReminder(true)
+      setTimeout(() => setShowBreakReminder(false), 10000)
+    }
 
     try {
-      // Call API
-      const response = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/chat`, {
-        message: userMessage,
-        conversation_id: conversationId
-      })
+      // Use retry logic
+      const response = await sendMessageWithRetry(userMessage)
 
-      // Update conversation ID
       if (!conversationId) {
         setConversationId(response.data.conversation_id)
       }
 
-      // Add assistant message to UI
       setMessages(prev => [...prev, { 
         role: 'assistant', 
         content: response.data.response,
@@ -52,9 +125,29 @@ export default function ChatPage() {
 
     } catch (error) {
       console.error('Error sending message:', error)
+      
+      let errorMessage = 'Sorry, I had trouble connecting. Please try again.'
+      
+      if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Request timed out. The server might be slow. Please try again.'
+      } else if (error.response) {
+        if (error.response.status === 429) {
+          errorMessage = 'Too many requests. Please wait a moment before trying again.'
+        } else if (error.response.status === 500) {
+          errorMessage = 'Server error. Please try again in a moment.'
+        } else {
+          errorMessage = error.response.data?.message || errorMessage
+        }
+      } else if (error.request) {
+        errorMessage = 'Cannot reach server. Please check your internet connection.'
+        setIsOffline(true)
+      }
+      
+      setError(errorMessage)
+      
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: 'Sorry, I had trouble connecting. Please try again.',
+        content: errorMessage,
         error: true
       }])
     } finally {
@@ -63,9 +156,15 @@ export default function ChatPage() {
   }
 
   const handleKeyPress = (e) => {
+    // Send on Enter (without Shift)
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       sendMessage()
+    }
+    
+    // Clear input on Escape
+    if (e.key === 'Escape') {
+      setInput('')
     }
   }
 
@@ -100,6 +199,34 @@ export default function ChatPage() {
         </p>
       </div>
 
+      {/* Error Banner */}
+      {error && (
+        <div className="bg-red-50 border-b border-red-200 px-4 py-3 animate-fade-in">
+          <p className="text-center text-sm text-red-800">
+            <strong>⚠️ Error:</strong> {error}
+            {isOffline && (
+              <button 
+                onClick={() => window.location.reload()} 
+                className="ml-2 underline font-bold"
+              >
+                Retry
+              </button>
+            )}
+          </p>
+        </div>
+      )}
+
+      {/* Break Reminder */}
+      {showBreakReminder && (
+        <div className="bg-purple-50 border-b border-purple-200 px-4 py-3 animate-fade-in">
+          <p className="text-center text-sm text-purple-800">
+            <strong>💜 Gentle reminder:</strong> You've been chatting for a while. 
+            Consider taking a break, getting some water, or trying a 
+            <Link href="/resources" className="underline font-bold ml-1">coping strategy</Link>.
+          </p>
+        </div>
+      )}
+
       {/* Chat Messages */}
       <div className="flex-1 overflow-y-auto px-6 py-8">
         <div className="max-w-4xl mx-auto space-y-6">
@@ -119,23 +246,35 @@ export default function ChatPage() {
           {messages.map((message, index) => (
             <div
               key={index}
-              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
+              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in group`}
             >
               <div
-                className={`max-w-3xl px-6 py-4 rounded-2xl ${
+                className={`max-w-3xl px-6 py-4 rounded-2xl relative ${
                   message.role === 'user'
                     ? 'bg-blue-600 text-white'
                     : message.is_crisis
                     ? 'bg-red-50 border-2 border-red-300 text-gray-800'
+                    : message.error
+                    ? 'bg-red-50 border-2 border-red-200 text-red-800'
                     : 'bg-white text-gray-800 shadow-md'
                 }`}
               >
                 {message.role === 'assistant' && (
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-2xl">🌱</span>
-                    <span className="font-semibold text-sm">Neurobud</span>
-                    {message.is_crisis && (
-                      <span className="text-red-600 font-bold text-xs">🆘 CRISIS ALERT</span>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-sm">Neurobud</span>
+                      {message.is_crisis && (
+                        <span className="text-red-600 font-bold text-xs">🆘 CRISIS ALERT</span>
+                      )}
+                    </div>
+                    {!message.error && (
+                      <button
+                        onClick={() => copyMessage(message.content)}
+                        className="opacity-0 group-hover:opacity-100 text-xs text-gray-500 hover:text-gray-700 transition-opacity"
+                        title="Copy message"
+                      >
+                        📋 Copy
+                      </button>
                     )}
                   </div>
                 )}
@@ -145,16 +284,18 @@ export default function ChatPage() {
           ))}
 
           {isLoading && (
-            <div className="flex justify-start">
+            <div className="flex justify-start animate-fade-in">
               <div className="bg-white px-6 py-4 rounded-2xl shadow-md">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   <span className="text-2xl">🌱</span>
-                  <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                    <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-1 mb-1">
+                      <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
+                      <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                      <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                    </div>
+                    <span className="text-xs text-gray-600">Neurobud is thinking...</span>
                   </div>
-                  <span className="text-sm text-gray-600 ml-2">Neurobud is typing...</span>
                 </div>
               </div>
             </div>
@@ -167,15 +308,21 @@ export default function ChatPage() {
       {/* Input Area */}
       <div className="bg-white border-t px-4 sm:px-6 py-4">
         <div className="max-w-4xl mx-auto flex gap-2 sm:gap-3">
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Share what's on your mind..."
-            className="flex-1 border border-gray-300 rounded-xl px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-            rows={2}
-            disabled={isLoading}
-          />
+          <div className="flex-1">
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="Share what's on your mind..."
+              className="w-full border border-gray-300 rounded-xl px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              rows={2}
+              disabled={isLoading}
+              maxLength={2000}
+            />
+            <div className="text-xs text-gray-500 mt-1 text-right">
+              {input.length}/2000
+            </div>
+          </div>
           <button
             onClick={sendMessage}
             disabled={isLoading || !input.trim()}
@@ -186,6 +333,9 @@ export default function ChatPage() {
         </div>
         <p className="text-xs text-gray-500 text-center mt-3">
           This is not therapy or medical advice. For professional help, consult a licensed therapist.
+          <span className="block mt-1 text-gray-400">
+            💡 Tip: Press Enter to send, Shift+Enter for new line, Esc to clear
+          </span>
         </p>
       </div>
     </div>

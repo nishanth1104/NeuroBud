@@ -129,7 +129,7 @@ Remember: Your goal is to be a supportive companion who teaches coping skills an
             }
         
         except Exception as e:
-            print(f"❌ OpenAI API Error: {e}")
+            print(f"[ERROR] OpenAI API Error: {e}")
             return {
                 "response": "I'm having trouble connecting right now. Please try again in a moment.",
                 "tokens_used": 0,

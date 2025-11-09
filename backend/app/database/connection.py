@@ -1,13 +1,17 @@
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.pool import QueuePool
 from app.config import settings
 
-# Create database engine
+# Create database engine with connection pooling
 engine = create_engine(
     settings.DATABASE_URL,
-    pool_pre_ping=True,  # Verify connections before using
-    echo=True if settings.ENVIRONMENT == "development" else False  # Log SQL queries in dev
+    poolclass=QueuePool,
+    pool_size=5,           # Number of connections to keep open
+    max_overflow=10,       # Max additional connections
+    pool_pre_ping=True,    # Verify connections before using
+    pool_recycle=3600,     # Recycle connections after 1 hour
+    echo=True if settings.ENVIRONMENT == "development" else False
 )
 
 # Session factory

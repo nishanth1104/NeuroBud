@@ -71,21 +71,21 @@ class CrisisDetector:
                 detected_keywords.append(keyword)
         
         if detected_keywords:
-            print(f"🚨 CRITICAL keywords found: {detected_keywords}")
+            print(f"[CRISIS-CRITICAL] Keywords found: {detected_keywords}")
             return {
                 "is_crisis": True,
                 "severity": "critical",
                 "keywords_detected": detected_keywords,
                 "recommended_action": "immediate_intervention"
             }
-        
+
         # Check for moderate keywords
         for keyword in self.MODERATE_KEYWORDS:
             if keyword in message_lower:
                 detected_keywords.append(keyword)
-        
+
         if detected_keywords:
-            print(f"⚠️ MODERATE keywords found: {detected_keywords}")
+            print(f"[CRISIS-MODERATE] Keywords found: {detected_keywords}")
             return {
                 "is_crisis": True,
                 "severity": "moderate",
@@ -105,7 +105,7 @@ class CrisisDetector:
         """Get appropriate crisis response based on severity"""
         
         if severity == "critical":
-            return """🆘 I'm really concerned about what you're sharing. Please reach out for immediate help:
+            return """URGENT: I'm really concerned about what you're sharing. Please reach out for immediate help:
 
 **Call or text 988** - Suicide & Crisis Lifeline (24/7, free, confidential)
 **Text HOME to 741741** - Crisis Text Line (24/7)
