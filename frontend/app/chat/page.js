@@ -104,17 +104,22 @@ export default function ChatPage() {
       <div className="flex-1 overflow-y-auto px-6 py-8">
         <div className="max-w-4xl mx-auto space-y-6">
           {messages.length === 0 && (
-            <div className="text-center text-gray-500 mt-20">
-              <div className="text-6xl mb-4">💬</div>
-              <p className="text-xl">Start a conversation...</p>
-              <p className="text-sm mt-2">Share what's on your mind. I'm here to listen.</p>
+            <div className="text-center text-gray-500 mt-20 animate-fade-in">
+              <div className="text-8xl mb-6 animate-bounce">💬</div>
+              <p className="text-2xl font-semibold text-gray-700 mb-2">Start a conversation...</p>
+              <p className="text-base text-gray-600 mb-6">Share what's on your mind. I'm here to listen.</p>
+              <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 max-w-md mx-auto">
+                <p className="text-sm text-blue-800">
+                  💡 <strong>Try asking:</strong> "I'm feeling anxious" or "Can you help me relax?"
+                </p>
+              </div>
             </div>
           )}
 
           {messages.map((message, index) => (
             <div
               key={index}
-              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
             >
               <div
                 className={`max-w-3xl px-6 py-4 rounded-2xl ${
@@ -143,9 +148,13 @@ export default function ChatPage() {
             <div className="flex justify-start">
               <div className="bg-white px-6 py-4 rounded-2xl shadow-md">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.4s'}}></div>
+                  <span className="text-2xl">🌱</span>
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                    <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                  </div>
+                  <span className="text-sm text-gray-600 ml-2">Neurobud is typing...</span>
                 </div>
               </div>
             </div>
@@ -156,21 +165,21 @@ export default function ChatPage() {
       </div>
 
       {/* Input Area */}
-      <div className="bg-white border-t px-6 py-4">
-        <div className="max-w-4xl mx-auto flex gap-3">
+      <div className="bg-white border-t px-4 sm:px-6 py-4">
+        <div className="max-w-4xl mx-auto flex gap-2 sm:gap-3">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder="Share what's on your mind..."
-            className="flex-1 border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            className="flex-1 border border-gray-300 rounded-xl px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             rows={2}
             disabled={isLoading}
           />
           <button
             onClick={sendMessage}
             disabled={isLoading || !input.trim()}
-            className="bg-blue-600 text-white px-8 py-3 rounded-xl hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-semibold transition-colors"
+            className="bg-blue-600 text-white px-4 sm:px-8 py-2 sm:py-3 rounded-xl hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-semibold transition-colors text-sm sm:text-base"
           >
             Send
           </button>
