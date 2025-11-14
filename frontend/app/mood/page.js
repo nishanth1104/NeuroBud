@@ -3,8 +3,72 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useSession, signOut } from 'next-auth/react'
+import { useAdmin } from '../hooks/useAdmin'
+
+function UserProfile() {
+  const { data: session, status } = useSession()
+  const [showMenu, setShowMenu] = useState(false)
+
+  if (status === 'loading') {
+    return (
+      <div className="w-8 h-8 bg-gray-200 rounded-full animate-pulse"></div>
+    )
+  }
+
+  if (!session) {
+    return (
+      <Link
+        href="/auth/signin"
+        className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors text-sm"
+      >
+        Sign In
+      </Link>
+    )
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setShowMenu(!showMenu)}
+        className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+      >
+        {session.user.image ? (
+          <img
+            src={session.user.image}
+            alt={session.user.name}
+            className="w-8 h-8 rounded-full border-2 border-blue-600"
+          />
+        ) : (
+          <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold">
+            {session.user.name?.[0]?.toUpperCase() || 'U'}
+          </div>
+        )}
+      </button>
+
+      {showMenu && (
+        <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-xl shadow-lg py-2 z-50">
+          <div className="px-4 py-3 border-b border-gray-200">
+            <p className="font-semibold text-gray-800">{session.user.name}</p>
+            <p className="text-sm text-gray-600">{session.user.email}</p>
+          </div>
+          <button
+            onClick={() => signOut({ callbackUrl: '/' })}
+            className="w-full text-left px-4 py-2 text-red-600 hover:bg-red-50 transition-colors"
+          >
+            Sign Out
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function MoodPage() {
+  const router = useRouter()
+  const { data: session, status } = useSession()
+  const { isAdmin } = useAdmin() 
   const [moodScore, setMoodScore] = useState(5)
   const [note, setNote] = useState('')
   const [history, setHistory] = useState([])
@@ -13,15 +77,45 @@ export default function MoodPage() {
   const [justLogged, setJustLogged] = useState(false)
   const [error, setError] = useState(null)
 
+  // Redirect to sign in if not authenticated
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/auth/signin')
+    }
+  }, [status, router])
+
   // Load mood history on page load
   useEffect(() => {
-    loadMoodHistory()
-  }, [])
+    if (session) {
+      loadMoodHistory()
+    }
+  }, [session])
+
+  // Show loading while checking authentication
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-6xl mb-4">🌱</div>
+          <p className="text-xl text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Don't render anything if not authenticated (redirecting)
+  if (!session) {
+    return null
+  }
 
   const loadMoodHistory = async () => {
+    if (!session?.user?.email) return
+
     setHistoryLoading(true)
     try {
-      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/mood/history?days=7`)
+      const response = await axios.get(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/mood/history?days=7&user_email=${encodeURIComponent(session.user.email)}`
+      )
       setHistory(response.data.entries)
     } catch (error) {
       console.error('Error loading mood history:', error)
@@ -31,31 +125,37 @@ export default function MoodPage() {
   }
 
   const logMood = async () => {
+    if (!session?.user?.email) {
+      setError('You must be logged in to log mood.')
+      return
+    }
+
     setIsLoading(true)
     setError(null)
-    
+
     try {
       await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/mood`, {
         mood_score: moodScore,
-        note: note.trim() || null
+        note: note.trim() || null,
+        user_email: session.user.email
       })
-      
+
       setJustLogged(true)
       setNote('')
       setTimeout(() => setJustLogged(false), 3000)
-      
+
       loadMoodHistory()
     } catch (error) {
       console.error('Error logging mood:', error)
-      
+
       let errorMessage = 'Failed to log mood. Please try again.'
-      
+
       if (error.response?.status === 429) {
         errorMessage = 'Too many requests. Please wait a moment.'
       } else if (error.response?.status === 400) {
         errorMessage = error.response.data?.detail || errorMessage
       }
-      
+
       setError(errorMessage)
     } finally {
       setIsLoading(false)
@@ -89,24 +189,36 @@ export default function MoodPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <nav className="bg-white border-b shadow-sm">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="text-2xl font-bold text-blue-600 flex items-center gap-2">
-            🌱 Neurobud
-          </Link>
-          <div className="flex gap-4">
-            <Link href="/chat" className="text-gray-600 hover:text-blue-600 font-medium">
-              Chat
+        <nav className="bg-white border-b shadow-sm">
+          <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+            <Link href="/" className="text-2xl font-bold text-blue-600 flex items-center gap-2">
+              🌱 Neurobud
             </Link>
-            <Link href="/mood" className="text-blue-600 font-semibold border-b-2 border-blue-600">
-              Mood
-            </Link>
-            <Link href="/resources" className="text-gray-600 hover:text-blue-600 font-medium">
-              Resources
-            </Link>
+            <div className="flex items-center gap-4">
+              <Link href="/chat" className="text-gray-600 hover:text-blue-600 font-medium">
+                Chat
+              </Link>
+              <Link href="/mood" className="text-blue-600 font-semibold border-b-2 border-blue-600">
+                Mood
+              </Link>
+              <Link href="/resources" className="text-gray-600 hover:text-blue-600 font-medium">
+                Resources
+              </Link>
+
+              {/* Admin Link */}
+              {isAdmin && (
+                <Link href="/admin" className="text-purple-600 hover:text-purple-700 font-medium flex items-center gap-1">
+                  ⚙️ Admin
+                </Link>
+              )}
+
+              <UserProfile />
+            </div>
           </div>
-        </div>
-      </nav>
+        </nav>
+
+      {/* Sign Out Button */}
+      
 
       {/* Main Content */}
       <div className="max-w-4xl mx-auto px-6 py-12">

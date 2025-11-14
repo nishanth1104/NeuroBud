@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
+from sqlalchemy import text, func, case
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -35,16 +36,18 @@ from app.models.mood_entry import MoodEntry
 from app.models.crisis_event import CrisisEvent
 from app.utils.sanitizer import sanitize_text, validate_mood_score, sanitize_note
 from app.middleware.logging import RequestLoggingMiddleware
+from app.models.user import User
+from app.models.model_response import ModelResponse
 
 # Create database tables (only in production, not tests)
 import sys
 if "pytest" not in sys.modules:
     try:
         Base.metadata.create_all(bind=engine)
-        print("✅ Database connected successfully!")
+        print("[OK] Database connected successfully!")
     except Exception as e:
-        print(f"⚠️ Warning: Could not connect to database: {e}")
-        print("⚠️ Running without database connection (some features disabled)")
+        print(f"[WARNING] Could not connect to database: {e}")
+        print("[WARNING] Running without database connection (some features disabled)")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -68,11 +71,11 @@ app = FastAPI(
     * `/api/mood` - Log mood entry
     * `/api/mood/history` - Get mood history
     * `/api/analytics` - Get system analytics
+    * `/api/ab-testing/stats` - Get A/B testing statistics
     
     ## Authentication
     
-    Currently no authentication required (anonymous usage).
-    OAuth coming in Week 2!
+    OAuth 2.0 with Google & GitHub
     
     ## Rate Limits
     
@@ -114,19 +117,25 @@ app.add_middleware(
 chat_engine = ChatEngine()
 crisis_detector = CrisisDetector()
 
+class FeedbackRequest(BaseModel):
+    message_id: int
+    was_helpful: Optional[bool] = None
+    user_rating: Optional[int] = None
+    user_feedback: Optional[str] = None
+
 # ========== LIFECYCLE EVENTS ==========
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize on startup"""
-    print("\n🚀 Starting Neurobud API...")
-    print("✅ Initialization complete")
+    print("\n[STARTUP] Starting Neurobud API...")
+    print("[OK] Initialization complete")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
-    print("\n🛑 Shutting down Neurobud API...")
-    print("✅ Cleanup complete")
+    print("\n[SHUTDOWN] Shutting down Neurobud API...")
+    print("[OK] Cleanup complete")
 
 # ========== EXCEPTION HANDLERS ==========
 
@@ -152,7 +161,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     """Handle unexpected errors"""
-    print(f"❌ Unexpected error: {exc}")
+    print(f"[ERROR] Unexpected error: {exc}")
     return JSONResponse(
         status_code=500,
         content={
@@ -166,19 +175,22 @@ async def general_exception_handler(request: Request, exc: Exception):
 class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[int] = None
+    user_email: Optional[str] = None
 
 class ChatResponse(BaseModel):
     conversation_id: int
     message: str
     response: str
+    message_id: int
     is_crisis: bool
     crisis_severity: Optional[str] = None
     tokens_used: int
     response_time_ms: float
 
 class MoodRequest(BaseModel):
-    mood_score: int  # 1-10
+    mood_score: int
     note: Optional[str] = None
+    user_email: Optional[str] = None
 
 class MoodResponse(BaseModel):
     id: int
@@ -186,18 +198,24 @@ class MoodResponse(BaseModel):
     note: Optional[str]
     created_at: datetime
 
+class UserLoginRequest(BaseModel):
+    email: str
+    name: Optional[str] = None
+    provider: str
+    provider_id: str
+    avatar_url: Optional[str] = None
+
 # ========== API ENDPOINTS ==========
 
 @app.get("/")
 def root(db: Session = Depends(get_db)):
     """Health check endpoint with database connection test"""
     
-    # Test database connection
     try:
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         db_status = "connected"
     except Exception as e:
-        print(f"❌ Database connection failed: {e}")
+        print(f"[ERROR] Database connection failed: {e}")
         db_status = "disconnected"
     
     return {
@@ -211,15 +229,8 @@ def root(db: Session = Depends(get_db)):
 @app.post("/api/chat", response_model=ChatResponse)
 @limiter.limit("20/minute")
 def chat(chat_data: ChatRequest, request: Request, db: Session = Depends(get_db)):
-    """
-    Chat with Neurobud AI
+    """Chat with Neurobud AI"""
     
-    - Creates new conversation if conversation_id is None
-    - Detects crisis situations
-    - Logs all messages to database
-    """
-    
-    # Sanitize and validate message
     message = sanitize_text(chat_data.message)
     
     if not message or len(message.strip()) == 0:
@@ -228,19 +239,16 @@ def chat(chat_data: ChatRequest, request: Request, db: Session = Depends(get_db)
     if len(message) > 2000:
         raise HTTPException(status_code=400, detail="Message too long (max 2000 characters)")
     
-    # Get or create conversation
     if chat_data.conversation_id:
         conversation = db.query(Conversation).filter(Conversation.id == chat_data.conversation_id).first()
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
     else:
-        # Create new conversation
         conversation = Conversation()
         db.add(conversation)
         db.commit()
         db.refresh(conversation)
     
-    # Get conversation history
     previous_messages = db.query(Message).filter(
         Message.conversation_id == conversation.id
     ).order_by(Message.created_at).all()
@@ -250,17 +258,13 @@ def chat(chat_data: ChatRequest, request: Request, db: Session = Depends(get_db)
         for msg in previous_messages
     ]
     
-    # Detect crisis
     crisis_result = crisis_detector.detect(message)
     
-    # Debug print
-    print(f"\n🔍 DEBUG Crisis Detection:")
+    print(f"\n[DEBUG] Crisis Detection:")
     print(f"Message: {message}")
-    print(f"Crisis Result: {crisis_result}")
     print(f"Is Crisis: {crisis_result['is_crisis']}")
     print(f"Severity: {crisis_result['severity']}\n")
     
-    # Save user message
     user_message = Message(
         conversation_id=conversation.id,
         role="user",
@@ -270,7 +274,6 @@ def chat(chat_data: ChatRequest, request: Request, db: Session = Depends(get_db)
     db.commit()
     db.refresh(user_message)
     
-    # If crisis detected, log it
     if crisis_result["is_crisis"]:
         crisis_event = CrisisEvent(
             conversation_id=conversation.id,
@@ -280,29 +283,36 @@ def chat(chat_data: ChatRequest, request: Request, db: Session = Depends(get_db)
         )
         db.add(crisis_event)
         db.commit()
-        
-        print(f"✅ Crisis event logged to database!")
+        print(f"[OK] Crisis event logged to database!")
+
+    user_id = None
     
-    # Generate AI response based on crisis detection
     if crisis_result["is_crisis"] and crisis_result["severity"] in ["critical", "moderate"]:
-        # Use crisis response
-        print(f"🚨 Using crisis protocol response!")
+        print(f"[CRISIS] Using crisis protocol response!")
         ai_response_text = crisis_detector.get_crisis_response(crisis_result["severity"])
         ai_result = {
             "response": ai_response_text,
             "tokens_used": chat_engine.estimate_tokens(ai_response_text),
             "model": "crisis_protocol",
+            "model_variant": "crisis",
             "response_time_ms": 0
         }
     else:
-        # Normal AI chat
-        print(f"💬 Using normal AI response")
+        print(f"[CHAT] Using AI response with A/B testing")
+        
+        if chat_data.user_email:
+            user = db.query(User).filter(User.email == chat_data.user_email).first()
+            if user:
+                user_id = user.id
+        
         ai_result = chat_engine.chat(
             message=message,
-            conversation_history=conversation_history
+            conversation_history=conversation_history,
+            user_id=user_id
         )
+        
+        print(f"[A/B] Using {ai_result.get('model_variant', 'base')} model")
     
-    # Save assistant message
     assistant_message = Message(
         conversation_id=conversation.id,
         role="assistant",
@@ -313,11 +323,27 @@ def chat(chat_data: ChatRequest, request: Request, db: Session = Depends(get_db)
     )
     db.add(assistant_message)
     db.commit()
+    db.refresh(assistant_message)
+    
+    if ai_result.get("model_variant") != "crisis":
+        model_response = ModelResponse(
+            message_id=assistant_message.id,
+            user_id=user_id,
+            model_id=ai_result["model"],
+            model_variant=ai_result.get("model_variant", "base"),
+            response_time_ms=ai_result.get("response_time_ms", 0),
+            tokens_used=ai_result["tokens_used"]
+        )
+        db.add(model_response)
+        db.commit()
+        
+        print(f"[OK] Tracked {ai_result.get('model_variant', 'base')} model response")
     
     return ChatResponse(
         conversation_id=conversation.id,
         message=message,
         response=ai_result["response"],
+        message_id=assistant_message.id,
         is_crisis=crisis_result["is_crisis"],
         crisis_severity=crisis_result["severity"] if crisis_result["is_crisis"] else None,
         tokens_used=ai_result["tokens_used"],
@@ -328,22 +354,27 @@ def chat(chat_data: ChatRequest, request: Request, db: Session = Depends(get_db)
 @limiter.limit("10/minute")
 def log_mood(mood_data: MoodRequest, request: Request, db: Session = Depends(get_db)):
     """Log user mood entry"""
-    
-    # Validate mood score
+
     if not validate_mood_score(mood_data.mood_score):
         raise HTTPException(status_code=400, detail="Mood score must be between 1 and 10")
-    
-    # Sanitize note
+
     sanitized_note = sanitize_note(mood_data.note)
-    
+
+    user_id = None
+    if mood_data.user_email:
+        user = db.query(User).filter(User.email == mood_data.user_email).first()
+        if user:
+            user_id = user.id
+
     mood_entry = MoodEntry(
         mood_score=mood_data.mood_score,
-        note=sanitized_note
+        note=sanitized_note,
+        user_id=user_id
     )
     db.add(mood_entry)
     db.commit()
     db.refresh(mood_entry)
-    
+
     return MoodResponse(
         id=mood_entry.id,
         mood_score=mood_entry.mood_score,
@@ -352,22 +383,30 @@ def log_mood(mood_data: MoodRequest, request: Request, db: Session = Depends(get
     )
 
 @app.get("/api/mood/history")
-def get_mood_history(days: int = 30, limit: int = 100, db: Session = Depends(get_db)):
+def get_mood_history(days: int = 30, limit: int = 100, user_email: Optional[str] = None, db: Session = Depends(get_db)):
     """Get mood history for past X days"""
-    
-    # Validate parameters
+
     if days < 1 or days > 365:
         raise HTTPException(status_code=400, detail="Days must be between 1 and 365")
-    
+
     if limit < 1 or limit > 500:
         raise HTTPException(status_code=400, detail="Limit must be between 1 and 500")
-    
+
     cutoff_date = datetime.now() - timedelta(days=days)
-    
-    mood_entries = db.query(MoodEntry).filter(
-        MoodEntry.created_at >= cutoff_date
-    ).order_by(MoodEntry.created_at.desc()).limit(limit).all()
-    
+
+    query = db.query(MoodEntry).filter(MoodEntry.created_at >= cutoff_date)
+
+    if user_email:
+        user = db.query(User).filter(User.email == user_email).first()
+        if user:
+            query = query.filter(MoodEntry.user_id == user.id)
+        else:
+            return {"entries": [], "total": 0, "days": days}
+    else:
+        query = query.filter(MoodEntry.user_id == None)
+
+    mood_entries = query.order_by(MoodEntry.created_at.desc()).limit(limit).all()
+
     return {
         "entries": [
             {
@@ -386,25 +425,16 @@ def get_mood_history(days: int = 30, limit: int = 100, db: Session = Depends(get
 def get_analytics(db: Session = Depends(get_db)):
     """Get basic system analytics"""
     
-    # Count total conversations
     total_conversations = db.query(Conversation).count()
-    
-    # Count total messages
     total_messages = db.query(Message).count()
-    
-    # Count total mood entries
     total_moods = db.query(MoodEntry).count()
-    
-    # Count crisis events
     total_crisis_events = db.query(CrisisEvent).count()
     
-    # Count conversations in last 24 hours
     yesterday = datetime.now() - timedelta(days=1)
     recent_conversations = db.query(Conversation).filter(
         Conversation.created_at >= yesterday
     ).count()
     
-    # Average mood score (last 7 days)
     week_ago = datetime.now() - timedelta(days=7)
     recent_moods = db.query(MoodEntry).filter(
         MoodEntry.created_at >= week_ago
@@ -422,13 +452,73 @@ def get_analytics(db: Session = Depends(get_db)):
         "version": "1.0.0"
     }
 
+@app.get("/api/ab-testing/stats")
+def get_ab_testing_stats(db: Session = Depends(get_db)):
+    """Get A/B testing statistics with user feedback"""
+    
+    try:
+        # Get all model responses
+        all_responses = db.query(ModelResponse).all()
+        
+        # Group by variant
+        stats = {}
+        for response in all_responses:
+            variant = response.model_variant
+            if variant not in stats:
+                stats[variant] = {
+                    "responses": [],
+                    "helpful": 0,
+                    "not_helpful": 0,
+                    "ratings": []
+                }
+            
+            stats[variant]["responses"].append(response)
+            if response.was_helpful == True:
+                stats[variant]["helpful"] += 1
+            elif response.was_helpful == False:
+                stats[variant]["not_helpful"] += 1
+            if response.user_rating:
+                stats[variant]["ratings"].append(response.user_rating)
+        
+        # Calculate aggregates
+        result = {}
+        for variant, data in stats.items():
+            total = len(data["responses"])
+            avg_time = sum(r.response_time_ms for r in data["responses"]) / total if total > 0 else 0
+            avg_tokens = sum(r.tokens_used for r in data["responses"]) / total if total > 0 else 0
+            avg_rating = sum(data["ratings"]) / len(data["ratings"]) if data["ratings"] else None
+            helpful_count = data["helpful"]
+            not_helpful_count = data["not_helpful"]
+            total_feedback = helpful_count + not_helpful_count
+            
+            result[variant] = {
+                "total_responses": total,
+                "avg_response_time_ms": round(avg_time, 2),
+                "avg_tokens_used": round(avg_tokens, 2),
+                "avg_user_rating": round(avg_rating, 2) if avg_rating else None,
+                "helpful_count": helpful_count,
+                "not_helpful_count": not_helpful_count,
+                "helpfulness_ratio": round(helpful_count / total_feedback, 2) if total_feedback > 0 else None,
+                "feedback_count": len([r for r in data["responses"] if r.user_feedback]),
+                "model_id": settings.FINE_TUNED_MODEL_ID if variant == "fine_tuned" else settings.BASE_MODEL
+            }
+        
+        return {
+            "ab_testing_enabled": settings.AB_TESTING_ENABLED,
+            "split_ratio": settings.AB_TEST_SPLIT,
+            "fine_tuned_model_available": bool(settings.FINE_TUNED_MODEL_ID),
+            "stats": result
+        }
+    
+    except Exception as e:
+        print(f"[ERROR] A/B testing stats error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/admin/cleanup")
 def cleanup_old_data(days: int = 90, db: Session = Depends(get_db)):
-    """
-    Cleanup old conversations (admin only).
-    
-    In production, this would require authentication.
-    """
+    """Cleanup old conversations"""
     from app.utils.cleanup import cleanup_old_conversations
     
     deleted = cleanup_old_conversations(db, days)
@@ -437,4 +527,115 @@ def cleanup_old_data(days: int = 90, db: Session = Depends(get_db)):
         "success": True,
         "conversations_deleted": deleted,
         "days_threshold": days
+    }
+
+@app.post("/api/auth/login")
+def user_login(user_data: UserLoginRequest, db: Session = Depends(get_db)):
+    """Handle OAuth login"""
+    
+    user = db.query(User).filter(User.provider_id == user_data.provider_id).first()
+    
+    if user:
+        user.last_login = datetime.now()
+        user.name = user_data.name
+        user.avatar_url = user_data.avatar_url
+        db.commit()
+        db.refresh(user)
+    else:
+        user = User(
+            email=user_data.email,
+            name=user_data.name,
+            provider=user_data.provider,
+            provider_id=user_data.provider_id,
+            avatar_url=user_data.avatar_url,
+            last_login=datetime.now()
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    
+    return {
+        "id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "avatar_url": user.avatar_url,
+        "created_at": user.created_at
+    }
+
+@app.post("/api/feedback")
+@limiter.limit("30/minute")
+def submit_feedback(feedback_data: FeedbackRequest, request: Request, db: Session = Depends(get_db)):
+    """Submit user feedback"""
+    
+    if feedback_data.user_rating is not None:
+        if feedback_data.user_rating < 1 or feedback_data.user_rating > 5:
+            raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
+    
+    model_response = db.query(ModelResponse).filter(
+        ModelResponse.message_id == feedback_data.message_id
+    ).first()
+    
+    if not model_response:
+        message = db.query(Message).filter(Message.id == feedback_data.message_id).first()
+        if not message:
+            raise HTTPException(status_code=404, detail="Message not found")
+        
+        model_response = ModelResponse(
+            message_id=feedback_data.message_id,
+            user_id=None,
+            model_id=message.model or "unknown",
+            model_variant="unknown",
+            response_time_ms=message.response_time_ms or 0,
+            tokens_used=message.tokens_used or 0
+        )
+        db.add(model_response)
+        db.commit()
+        db.refresh(model_response)
+    
+    if feedback_data.was_helpful is not None:
+        model_response.was_helpful = feedback_data.was_helpful
+    
+    if feedback_data.user_rating is not None:
+        model_response.user_rating = feedback_data.user_rating
+    
+    if feedback_data.user_feedback is not None:
+        sanitized = sanitize_text(feedback_data.user_feedback)
+        if len(sanitized) > 500:
+            sanitized = sanitized[:500]
+        model_response.user_feedback = sanitized
+    
+    db.commit()
+    db.refresh(model_response)
+    
+    print(f"[FEEDBACK] Message {feedback_data.message_id}: Rating={feedback_data.user_rating}, Helpful={feedback_data.was_helpful}")
+    
+    return {
+        "success": True,
+        "message": "Feedback received",
+        "feedback": {
+            "was_helpful": model_response.was_helpful,
+            "rating": model_response.user_rating,
+            "has_text_feedback": bool(model_response.user_feedback)
+        }
+    }
+
+@app.get("/api/auth/check-admin")
+def check_admin(user_email: str, db: Session = Depends(get_db)):
+    """Check if user is admin"""
+    
+    if not user_email:
+        raise HTTPException(status_code=400, detail="Email required")
+    
+    user = db.query(User).filter(User.email == user_email).first()
+    
+    if not user:
+        return {"is_admin": False, "message": "User not found"}
+    
+    return {
+        "is_admin": user.is_admin,
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "name": user.name
+        }
     }

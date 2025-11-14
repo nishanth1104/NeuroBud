@@ -1,139 +1,138 @@
-from openai import OpenAI
-from typing import List, Dict
+import openai
 import time
+import random
+from typing import List, Dict
 from app.config import settings
 
 class ChatEngine:
-    """AI chat engine with OpenAI integration"""
+    """OpenAI chat engine with A/B testing support"""
     
     def __init__(self):
-        self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        self.model = "gpt-4o-mini"
-        
-        self.system_prompt = """You are Neurobud, a compassionate mental wellness AI companion.
-
-🎯 YOUR ROLE:
-1. Listen actively and validate feelings without judgment
-2. Ask thoughtful, open-ended follow-up questions
-3. Suggest evidence-based coping strategies (CBT, mindfulness, breathing exercises)
-4. Teach users about their emotions (psychoeducation)
-5. Encourage professional help when appropriate
-6. Provide small, actionable steps users can take
-
-⚠️ CRITICAL BOUNDARIES:
-- You are NOT a therapist, psychologist, psychiatrist, or medical professional
-- You CANNOT diagnose mental health conditions (e.g., "You have depression")
-- You CANNOT provide medical advice or treatment plans
-- You CANNOT prescribe or advise on medication
-- You are NOT a substitute for professional therapy
-- You CANNOT guarantee confidentiality (conversations are logged for safety)
-
-🛡️ SAFETY PROTOCOLS:
-If user mentions:
-- Suicide, self-harm, "want to die", "end it all" → IMMEDIATELY provide crisis resources (988, Crisis Text Line)
-- Severe symptoms (can't function, not eating/sleeping for days, hearing voices) → STRONGLY encourage professional help
-- Medication questions → "I can't advise on medication. Please consult a doctor or psychiatrist."
-- Diagnosis requests → "I can't diagnose conditions. A licensed therapist can properly assess your symptoms."
-
-💬 COMMUNICATION STYLE:
-- Warm, empathetic, non-judgmental (like a supportive friend)
-- Simple, conversational language (avoid clinical jargon unless explaining)
-- Concise responses (2-3 paragraphs maximum)
-- End with a gentle question to continue conversation
-- Use validation phrases: "That sounds really difficult", "It makes sense you'd feel that way"
-
-📚 THERAPEUTIC TECHNIQUES TO USE:
-- CBT: Help identify and challenge negative thoughts
-- Behavioral Activation: Suggest small, mood-boosting activities
-- Mindfulness: Guide grounding exercises (5-4-3-2-1 technique)
-- Psychoeducation: Explain why they might feel this way (normalize emotions)
-
-⚠️ REMINDERS TO INCLUDE:
-- Every 5-7 messages, gently remind: "Remember, I'm an AI companion, not a therapist. For ongoing support, consider talking to a licensed mental health professional."
-- If user shares severe/ongoing symptoms, say: "What you're describing sounds significant. I'd really encourage you to talk with a therapist who can properly support you."
-
-🆘 CRISIS RESOURCES (always available):
-- 988 Suicide & Crisis Lifeline (US): Call or text 988
-- Crisis Text Line: Text HOME to 741741  
-- 911 for immediate emergencies
-
-Remember: Your goal is to be a supportive companion who teaches coping skills and bridges users to professional care when needed. You're a friend with boundaries, not a replacement for therapy."""
-
-    def estimate_tokens(self, text: str) -> int:
-        """Estimate tokens (since we skipped tiktoken)"""
-        # Rough estimate: 1 token ≈ 4 characters
-        return len(text) // 4
+        openai.api_key = settings.OPENAI_API_KEY
+        self.base_model = settings.BASE_MODEL
+        self.fine_tuned_model = settings.FINE_TUNED_MODEL_ID
+        self.ab_testing_enabled = settings.AB_TESTING_ENABLED
+        self.ab_test_split = settings.AB_TEST_SPLIT
     
-    def count_tokens(self, messages: List[Dict]) -> int:
-        """Count tokens in conversation for cost tracking"""
-        total = 0
-        for message in messages:
-            total += self.estimate_tokens(message["content"])
-        return total
-
-    def chat(self, 
-             message: str, 
-             conversation_history: List[Dict],
-             temperature: float = 0.7) -> Dict:
+    def select_model(self, user_id: int = None) -> tuple[str, str]:
         """
-        Generate chat response
-        
-        Args:
-            message: User's current message
-            conversation_history: List of previous messages [{"role": "user/assistant", "content": "..."}]
-            temperature: Creativity (0.0-1.0). 0.7 for empathetic responses.
+        Select which model to use based on A/B testing
         
         Returns:
-            {
-                "response": str,
-                "tokens_used": int,
-                "model": str,
-                "response_time_ms": float
-            }
+            (model_id, model_variant) tuple
+            model_variant: 'base' or 'fine_tuned'
+        """
+        
+        # If A/B testing disabled, use base model
+        if not self.ab_testing_enabled:
+            return (self.base_model, "base")
+        
+        # If no fine-tuned model, use base
+        if not self.fine_tuned_model:
+            return (self.base_model, "base")
+        
+        # If user_id provided, use consistent assignment
+        if user_id:
+            # Hash user_id to get consistent A/B assignment
+            assignment = hash(user_id) % 100
+            if assignment < (self.ab_test_split * 100):
+                return (self.base_model, "base")
+            else:
+                return (self.fine_tuned_model, "fine_tuned")
+        
+        # Random assignment for guests
+        if random.random() < self.ab_test_split:
+            return (self.base_model, "base")
+        else:
+            return (self.fine_tuned_model, "fine_tuned")
+    
+    def chat(
+        self, 
+        message: str, 
+        conversation_history: List[Dict] = None,
+        user_id: int = None
+    ) -> Dict:
+        """
+        Send message to OpenAI and get response
+        
+        Args:
+            message: User's message
+            conversation_history: Previous messages in conversation
+            user_id: User ID for consistent A/B assignment
+            
+        Returns:
+            Dict with response, tokens_used, model, variant, response_time_ms
         """
         
         start_time = time.time()
         
-        # Build messages array
-        messages = [{"role": "system", "content": self.system_prompt}]
+        # Select model (A/B testing)
+        model_id, model_variant = self.select_model(user_id)
+        
+        # Prepare messages
+        messages = [
+    {
+        "role": "system",
+        "content": """You are Neurobud, an empathetic AI mental wellness companion specifically designed for mental health support.
+
+IMPORTANT BOUNDARIES:
+- You ONLY discuss mental health, emotional wellbeing, stress, anxiety, mood, and related wellness topics
+- If asked about unrelated topics (math, general knowledge, coding, etc.), politely redirect to mental health
+- Example: "I'm specifically designed to support mental wellness. Is there something about your emotional wellbeing or mental health I can help with?"
+
+You provide:
+- Emotional support and active listening
+- Evidence-based coping strategies (CBT, mindfulness, breathing exercises)
+- Validation and empathy without judgment
+- Gentle guidance toward professional help when appropriate
+
+You do NOT:
+- Diagnose mental health conditions
+- Prescribe medication or treatment
+- Replace professional therapy
+- Answer questions unrelated to mental health
+- Make promises you can't keep
+
+For crisis situations (self-harm, suicide ideation):
+- Take them seriously and show concern
+- Recommend immediate help (988 Suicide Lifeline, emergency services)
+- Don't try to be a therapist
+
+Your tone is warm, understanding, and human-like. You stay focused on mental wellness."""
+    }
+]
         
         # Add conversation history
-        messages.extend(conversation_history)
+        if conversation_history:
+            messages.extend(conversation_history[-10:])  # Last 10 messages for context
         
         # Add current message
         messages.append({"role": "user", "content": message})
         
         try:
-            # Call OpenAI API
-            response = self.client.chat.completions.create(
-                model=self.model,
+            # Call OpenAI
+            response = openai.chat.completions.create(
+                model=model_id,
                 messages=messages,
-                temperature=temperature,
-                max_tokens=500  # Limit response length
+                temperature=0.7,
+                max_tokens=500
             )
             
-            # Extract response
-            assistant_message = response.choices[0].message.content
-            
-            # Calculate response time
+            # Calculate metrics
             response_time_ms = (time.time() - start_time) * 1000
             
-            # Estimate tokens (prompt + response)
-            total_tokens = self.count_tokens(messages) + self.estimate_tokens(assistant_message)
+            return {
+                "response": response.choices[0].message.content,
+                "tokens_used": response.usage.total_tokens,
+                "model": model_id,
+                "model_variant": model_variant,  # 'base' or 'fine_tuned'
+                "response_time_ms": response_time_ms
+            }
             
-            return {
-                "response": assistant_message,
-                "tokens_used": total_tokens,
-                "model": self.model,
-                "response_time_ms": round(response_time_ms, 2)
-            }
-        
         except Exception as e:
-            print(f"[ERROR] OpenAI API Error: {e}")
-            return {
-                "response": "I'm having trouble connecting right now. Please try again in a moment.",
-                "tokens_used": 0,
-                "model": self.model,
-                "response_time_ms": 0,
-                "error": str(e)
-            }
+            print(f"OpenAI API error: {e}")
+            raise
+    
+    def estimate_tokens(self, text: str) -> int:
+        """Rough estimation of tokens (4 chars ≈ 1 token)"""
+        return len(text) // 4

@@ -2,9 +2,11 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
+import { useAdmin } from '../hooks/useAdmin'
 
 export default function ResourcesPage() {
   const [expandedSection, setExpandedSection] = useState(null)
+  const { isAdmin } = useAdmin()
 
   const toggleSection = (section) => {
     setExpandedSection(expandedSection === section ? null : section)
@@ -28,6 +30,14 @@ export default function ResourcesPage() {
             <Link href="/resources" className="text-blue-600 font-semibold border-b-2 border-blue-600">
               Resources
             </Link>
+
+            {/* Admin Link */}
+            {isAdmin && (
+              <Link href="/admin" className="text-purple-600 hover:text-purple-700 font-medium flex items-center gap-1">
+                ⚙️ Admin
+              </Link>
+            )}
+            
           </div>
         </div>
       </nav>

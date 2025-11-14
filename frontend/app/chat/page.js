@@ -3,8 +3,13 @@
 import { useState, useRef, useEffect } from 'react'
 import axios from 'axios'
 import Link from 'next/link'
+import { useSession, signOut } from 'next-auth/react'
+import ReactMarkdown from 'react-markdown'
+import { useAdmin } from '../hooks/useAdmin'
 
 export default function ChatPage() {
+  const { data: session } = useSession()
+  const { isAdmin } = useAdmin()
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [conversationId, setConversationId] = useState(null)
@@ -13,7 +18,10 @@ export default function ChatPage() {
   const [isOffline, setIsOffline] = useState(false)
   const [messageCount, setMessageCount] = useState(0)
   const [showBreakReminder, setShowBreakReminder] = useState(false)
+  const [feedbackGiven, setFeedbackGiven] = useState({}) // Track which messages have feedback
+  const [showRating, setShowRating] = useState({}) // Track which message shows rating UI
   const messagesEndRef = useRef(null)
+  
 
   // Auto-scroll to bottom
   const scrollToBottom = () => {
@@ -54,6 +62,33 @@ export default function ChatPage() {
     navigator.clipboard.writeText(content)
   }
 
+  const submitFeedback = async (messageId, wasHelpful, rating = null, feedbackText = null) => {
+    try {
+      await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/feedback`, {
+        message_id: messageId,
+        was_helpful: wasHelpful,
+        user_rating: rating,
+        user_feedback: feedbackText
+      })
+      
+      // Mark this message as having feedback
+      setFeedbackGiven(prev => ({
+        ...prev,
+        [messageId]: { wasHelpful, rating, feedbackText }
+      }))
+      
+      // Hide rating UI after submission
+      setShowRating(prev => ({
+        ...prev,
+        [messageId]: false
+      }))
+      
+      console.log('Feedback submitted successfully')
+    } catch (error) {
+      console.error('Error submitting feedback:', error)
+    }
+  }
+
   const sendMessageWithRetry = async (userMessage, retries = 3) => {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
@@ -61,7 +96,8 @@ export default function ChatPage() {
           `${process.env.NEXT_PUBLIC_API_URL}/api/chat`,
           {
             message: userMessage,
-            conversation_id: conversationId
+            conversation_id: conversationId,
+            user_email: session?.user?.email || null
           },
           {
             timeout: 30000
@@ -116,7 +152,11 @@ export default function ChatPage() {
         setConversationId(response.data.conversation_id)
       }
 
+      // Get message ID from response (we need to track it)
+      const messageId = Date.now() // Temporary ID for frontend tracking
+
       setMessages(prev => [...prev, { 
+        id: response.data.message_id,
         role: 'assistant', 
         content: response.data.response,
         is_crisis: response.data.is_crisis,
@@ -146,6 +186,7 @@ export default function ChatPage() {
       setError(errorMessage)
       
       setMessages(prev => [...prev, { 
+        id: Date.now(),
         role: 'assistant', 
         content: errorMessage,
         error: true
@@ -176,7 +217,7 @@ export default function ChatPage() {
           <Link href="/" className="text-2xl font-bold text-blue-600 flex items-center gap-2">
             🌱 Neurobud
           </Link>
-          <div className="flex gap-4">
+          <div className="flex items-center gap-4">
             <Link href="/chat" className="text-blue-600 font-semibold border-b-2 border-blue-600">
               Chat
             </Link>
@@ -186,6 +227,14 @@ export default function ChatPage() {
             <Link href="/resources" className="text-gray-600 hover:text-blue-600 font-medium">
               Resources
             </Link>
+            {/* Admin Link - Only show if admin */}
+            {isAdmin && (
+              <Link href="/admin" className="text-purple-600 hover:text-purple-700 font-medium flex items-center gap-1">
+                ⚙️ Admin
+              </Link>
+            )}
+            {/* User Profile */}
+            <UserProfile />
           </div>
         </div>
       </nav>
@@ -244,42 +293,133 @@ export default function ChatPage() {
           )}
 
           {messages.map((message, index) => (
-            <div
-              key={index}
-              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in group`}
-            >
-              <div
-                className={`max-w-3xl px-6 py-4 rounded-2xl relative ${
-                  message.role === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : message.is_crisis
-                    ? 'bg-red-50 border-2 border-red-300 text-gray-800'
-                    : message.error
-                    ? 'bg-red-50 border-2 border-red-200 text-red-800'
-                    : 'bg-white text-gray-800 shadow-md'
-                }`}
-              >
-                {message.role === 'assistant' && (
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-sm">Neurobud</span>
-                      {message.is_crisis && (
-                        <span className="text-red-600 font-bold text-xs">🆘 CRISIS ALERT</span>
+            <div key={index}>
+              {/* User Message */}
+              {message.role === 'user' && (
+                <div className="flex justify-end animate-fade-in">
+                  <div className="bg-blue-600 text-white max-w-3xl px-6 py-4 rounded-2xl">
+                    {message.content}
+                  </div>
+                </div>
+              )}
+
+              {/* Assistant Message */}
+              {message.role === 'assistant' && (
+                <div className="flex flex-col items-start gap-2 animate-fade-in group">
+                  <div className="flex items-start gap-3 w-full">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold flex-shrink-0">
+                      AI
+                    </div>
+                    <div className={`flex-1 max-w-3xl px-6 py-4 rounded-2xl rounded-tl-none ${
+                      message.is_crisis
+                        ? 'bg-red-50 border-2 border-red-300'
+                        : message.error
+                        ? 'bg-red-50 border-2 border-red-200'
+                        : 'bg-white border border-gray-200 shadow-sm'
+                    }`}>
+                      {/* Header */}
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-sm text-gray-700">Neurobud</span>
+                          {message.is_crisis && (
+                            <span className="text-red-600 font-bold text-xs">🆘 CRISIS ALERT</span>
+                          )}
+                        </div>
+                        {!message.error && (
+                          <button
+                            onClick={() => copyMessage(message.content)}
+                            className="opacity-0 group-hover:opacity-100 text-xs text-gray-500 hover:text-gray-700 transition-opacity"
+                            title="Copy message"
+                          >
+                            📋 Copy
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Message Content */}
+                      <div className="prose prose-sm max-w-none">
+                        <ReactMarkdown
+                          components={{
+                            strong: ({node, ...props}) => <span className="font-bold" {...props} />,
+                            ul: ({node, ...props}) => <ul className="list-disc ml-4 my-2" {...props} />,
+                            ol: ({node, ...props}) => <ol className="list-decimal ml-4 my-2" {...props} />,
+                            p: ({node, ...props}) => <p className="mb-2" {...props} />,
+                          }}
+                        >
+                          {message.content}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Feedback UI - Only for non-error, non-crisis messages */}
+                  {!message.error && !message.is_crisis && message.id && (
+                    <div className="ml-11 flex items-center gap-2">
+                      {!feedbackGiven[message.id] ? (
+                        <>
+                          {/* Thumbs Up/Down */}
+                          <button
+                            onClick={() => submitFeedback(message.id, true)}
+                            className="text-gray-400 hover:text-green-600 transition-colors p-1 rounded hover:bg-green-50"
+                            title="Helpful"
+                          >
+                            👍
+                          </button>
+                          <button
+                            onClick={() => submitFeedback(message.id, false)}
+                            className="text-gray-400 hover:text-red-600 transition-colors p-1 rounded hover:bg-red-50"
+                            title="Not helpful"
+                          >
+                            👎
+                          </button>
+
+                          {/* Star Rating Button */}
+                          <button
+                            onClick={() => setShowRating(prev => ({...prev, [message.id]: !prev[message.id]}))}
+                            className="text-xs text-gray-500 hover:text-blue-600 ml-2 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                          >
+                            ⭐ Rate
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-xs text-green-600 flex items-center gap-1">
+                          ✓ Thanks for your feedback!
+                          {feedbackGiven[message.id].rating && (
+                            <span className="ml-2">
+                              {'⭐'.repeat(feedbackGiven[message.id].rating)}
+                            </span>
+                          )}
+                        </span>
                       )}
                     </div>
-                    {!message.error && (
+                  )}
+
+                  {/* Star Rating UI */}
+                  {showRating[message.id] && !feedbackGiven[message.id] && (
+                    <div className="ml-11 bg-blue-50 border border-blue-200 rounded-lg p-3 max-w-xs animate-fade-in">
+                      <p className="text-sm text-gray-700 mb-2">How helpful was this response?</p>
+                      <div className="flex gap-2 mb-3">
+                        {[1, 2, 3, 4, 5].map(rating => (
+                          <button
+                            key={rating}
+                            onClick={() => submitFeedback(message.id, true, rating)}
+                            className="text-2xl hover:scale-110 transition-transform"
+                            title={`${rating} star${rating > 1 ? 's' : ''}`}
+                          >
+                            ⭐
+                          </button>
+                        ))}
+                      </div>
                       <button
-                        onClick={() => copyMessage(message.content)}
-                        className="opacity-0 group-hover:opacity-100 text-xs text-gray-500 hover:text-gray-700 transition-opacity"
-                        title="Copy message"
+                        onClick={() => setShowRating(prev => ({...prev, [message.id]: false}))}
+                        className="text-xs text-gray-500 hover:text-gray-700"
                       >
-                        📋 Copy
+                        Cancel
                       </button>
-                    )}
-                  </div>
-                )}
-                <div className="whitespace-pre-wrap">{message.content}</div>
-              </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
 
@@ -338,6 +478,65 @@ export default function ChatPage() {
           </span>
         </p>
       </div>
+    </div>
+  )
+}
+
+function UserProfile() {
+  const { data: session, status } = useSession()
+  const [showMenu, setShowMenu] = useState(false)
+
+  if (status === 'loading') {
+    return (
+      <div className="w-8 h-8 bg-gray-200 rounded-full animate-pulse"></div>
+    )
+  }
+
+  if (!session) {
+    return (
+      <Link
+        href="/auth/signin"
+        className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors text-sm"
+      >
+        Sign In
+      </Link>
+    )
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setShowMenu(!showMenu)}
+        className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+      >
+        {session.user.image ? (
+          <img
+            src={session.user.image}
+            alt={session.user.name}
+            className="w-8 h-8 rounded-full border-2 border-blue-600"
+          />
+        ) : (
+          <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold">
+            {session.user.name?.[0]?.toUpperCase() || 'U'}
+          </div>
+        )}
+      </button>
+
+      {/* Dropdown Menu */}
+      {showMenu && (
+        <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-xl shadow-lg py-2 z-50">
+          <div className="px-4 py-3 border-b border-gray-200">
+            <p className="font-semibold text-gray-800">{session.user.name}</p>
+            <p className="text-sm text-gray-600">{session.user.email}</p>
+          </div>
+          <button
+            onClick={() => signOut({ callbackUrl: '/' })}
+            className="w-full text-left px-4 py-2 text-red-600 hover:bg-red-50 transition-colors"
+          >
+            Sign Out
+          </button>
+        </div>
+      )}
     </div>
   )
 }
