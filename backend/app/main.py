@@ -38,6 +38,8 @@ from app.utils.sanitizer import sanitize_text, validate_mood_score, sanitize_not
 from app.middleware.logging import RequestLoggingMiddleware
 from app.models.user import User
 from app.models.model_response import ModelResponse
+from app.models.api_cost import APICost
+from app.utils.cost_calculator import CostCalculator
 
 # Create database tables (only in production, not tests)
 import sys
@@ -72,6 +74,7 @@ app = FastAPI(
     * `/api/mood/history` - Get mood history
     * `/api/analytics` - Get system analytics
     * `/api/ab-testing/stats` - Get A/B testing statistics
+    * `/api/admin/cost-analytics` - Get cost analytics (Admin only)
     
     ## Authentication
     
@@ -162,6 +165,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 async def general_exception_handler(request: Request, exc: Exception):
     """Handle unexpected errors"""
     print(f"[ERROR] Unexpected error: {exc}")
+    import traceback
+    traceback.print_exc()
     return JSONResponse(
         status_code=500,
         content={
@@ -325,6 +330,7 @@ def chat(chat_data: ChatRequest, request: Request, db: Session = Depends(get_db)
     db.commit()
     db.refresh(assistant_message)
     
+    # Track model response for A/B testing (if not crisis)
     if ai_result.get("model_variant") != "crisis":
         model_response = ModelResponse(
             message_id=assistant_message.id,
@@ -338,6 +344,43 @@ def chat(chat_data: ChatRequest, request: Request, db: Session = Depends(get_db)
         db.commit()
         
         print(f"[OK] Tracked {ai_result.get('model_variant', 'base')} model response")
+        
+        # Track API costs
+        try:
+            # Estimate input/output tokens (rough split: 40% input, 60% output)
+            total_tokens = ai_result["tokens_used"]
+            input_tokens = int(total_tokens * 0.4)
+            output_tokens = int(total_tokens * 0.6)
+            
+            # Calculate costs
+            cost_data = CostCalculator.calculate_chat_cost(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                model=ai_result["model"]
+            )
+            
+            # Save cost tracking
+            api_cost = APICost(
+                user_id=user_id,
+                message_id=assistant_message.id,
+                conversation_id=conversation.id,
+                model=ai_result["model"],
+                feature="chat",
+                input_tokens=cost_data["input_tokens"],
+                output_tokens=cost_data["output_tokens"],
+                total_tokens=cost_data["total_tokens"],
+                input_cost=cost_data["input_cost"],
+                output_cost=cost_data["output_cost"],
+                total_cost=cost_data["total_cost"],
+                response_time_ms=ai_result.get("response_time_ms", 0)
+            )
+            db.add(api_cost)
+            db.commit()
+            
+            print(f"[COST] ${cost_data['total_cost']:.6f} - Input: {input_tokens}, Output: {output_tokens}")
+        except Exception as cost_error:
+            print(f"[WARNING] Cost tracking failed: {cost_error}")
+            # Continue even if cost tracking fails
     
     return ChatResponse(
         conversation_id=conversation.id,
@@ -515,6 +558,147 @@ def get_ab_testing_stats(db: Session = Depends(get_db)):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/cost-analytics")
+def get_cost_analytics(
+    days: int = 7,
+    db: Session = Depends(get_db)
+):
+    """
+    Get cost analytics (ADMIN ONLY)
+    
+    Returns:
+        - Total spend
+        - Daily breakdown
+        - Cost per feature
+        - Budget status
+        - Top users by cost
+    """
+    
+    try:
+        # Calculate date range
+        start_date = datetime.now() - timedelta(days=days)
+        
+        # Total spend for period
+        total_spend = db.query(func.sum(APICost.total_cost)).filter(
+            APICost.created_at >= start_date
+        ).scalar() or 0.0
+        
+        # All-time spend
+        all_time_spend = db.query(func.sum(APICost.total_cost)).scalar() or 0.0
+        
+        # Today's spend
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_spend = db.query(func.sum(APICost.total_cost)).filter(
+            APICost.created_at >= today_start
+        ).scalar() or 0.0
+        
+        # Cost by feature
+        feature_costs = db.query(
+            APICost.feature,
+            func.sum(APICost.total_cost).label('cost'),
+            func.count(APICost.id).label('requests')
+        ).filter(
+            APICost.created_at >= start_date
+        ).group_by(APICost.feature).all()
+        
+        # Cost by model
+        model_costs = db.query(
+            APICost.model,
+            func.sum(APICost.total_cost).label('cost'),
+            func.sum(APICost.total_tokens).label('tokens')
+        ).filter(
+            APICost.created_at >= start_date
+        ).group_by(APICost.model).all()
+        
+        # Daily breakdown
+        daily_costs = db.query(
+            func.date(APICost.created_at).label('date'),
+            func.sum(APICost.total_cost).label('cost'),
+            func.count(APICost.id).label('requests')
+        ).filter(
+            APICost.created_at >= start_date
+        ).group_by(func.date(APICost.created_at)).all()
+        
+        # Top 10 users by cost (if applicable)
+        top_users = db.query(
+            APICost.user_id,
+            func.sum(APICost.total_cost).label('cost'),
+            func.count(APICost.id).label('requests')
+        ).filter(
+            APICost.created_at >= start_date,
+            APICost.user_id.isnot(None)
+        ).group_by(APICost.user_id).order_by(
+            func.sum(APICost.total_cost).desc()
+        ).limit(10).all()
+        
+        # Budget calculations
+        budget_remaining = settings.TOTAL_BUDGET - all_time_spend
+        budget_used_percent = (all_time_spend / settings.TOTAL_BUDGET) * 100 if settings.TOTAL_BUDGET > 0 else 0
+        daily_budget_used_percent = (today_spend / settings.DAILY_BUDGET_LIMIT) * 100 if settings.DAILY_BUDGET_LIMIT > 0 else 0
+        
+        # Average cost per request
+        total_requests = db.query(func.count(APICost.id)).filter(
+            APICost.created_at >= start_date
+        ).scalar() or 0
+        avg_cost_per_request = total_spend / total_requests if total_requests > 0 else 0
+        
+        return {
+            "summary": {
+                "total_budget": settings.TOTAL_BUDGET,
+                "all_time_spend": round(all_time_spend, 4),
+                "budget_remaining": round(budget_remaining, 4),
+                "budget_used_percent": round(budget_used_percent, 2),
+                "period_spend": round(total_spend, 4),
+                "today_spend": round(today_spend, 4),
+                "daily_budget_limit": settings.DAILY_BUDGET_LIMIT,
+                "daily_budget_used_percent": round(daily_budget_used_percent, 2),
+                "avg_cost_per_request": round(avg_cost_per_request, 6),
+                "alert_triggered": budget_used_percent >= (settings.ALERT_THRESHOLD * 100)
+            },
+            "by_feature": [
+                {
+                    "feature": feature,
+                    "cost": round(float(cost), 4),
+                    "requests": int(requests),
+                    "avg_cost": round(float(cost) / int(requests), 6) if requests > 0 else 0
+                }
+                for feature, cost, requests in feature_costs
+            ],
+            "by_model": [
+                {
+                    "model": model,
+                    "cost": round(float(cost), 4),
+                    "tokens": int(tokens),
+                    "cost_per_1k_tokens": round((float(cost) / int(tokens)) * 1000, 4) if tokens > 0 else 0
+                }
+                for model, cost, tokens in model_costs
+            ],
+            "daily_breakdown": [
+                {
+                    "date": date.isoformat() if hasattr(date, 'isoformat') else str(date),
+                    "cost": round(float(cost), 4),
+                    "requests": int(requests)
+                }
+                for date, cost, requests in daily_costs
+            ],
+            "top_users": [
+                {
+                    "user_id": int(user_id) if user_id else None,
+                    "cost": round(float(cost), 4),
+                    "requests": int(requests),
+                    "avg_cost": round(float(cost) / int(requests), 6) if requests > 0 else 0
+                }
+                for user_id, cost, requests in top_users
+            ],
+            "period_days": days
+        }
+    
+    except Exception as e:
+        print(f"[ERROR] Cost analytics error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Cost analytics error: {str(e)}")
 
 @app.post("/api/admin/cleanup")
 def cleanup_old_data(days: int = 90, db: Session = Depends(get_db)):
