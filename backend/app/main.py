@@ -4,6 +4,7 @@ Neurobud API - Mental Wellness Companion
 
 A production-grade FastAPI application providing:
 - AI-powered empathetic chat (OpenAI GPT-4o-mini)
+- RAG (Retrieval Augmented Generation) with mental health knowledge base
 - Real-time crisis detection (keyword + sentiment analysis)
 - Mood tracking with history visualization
 - Mental health resources (hotlines, coping strategies)
@@ -57,11 +58,12 @@ app = FastAPI(
     description="""
     🌱 **Neurobud Mental Wellness Companion API**
     
-    A production-grade AI mental health chatbot with crisis detection.
+    A production-grade AI mental health chatbot with crisis detection and RAG.
     
     ## Features
     
     * **AI Chat**: Empathetic conversations powered by OpenAI GPT-4o-mini
+    * **RAG System**: 60+ curated mental health articles for accurate responses
     * **Crisis Detection**: Real-time keyword + sentiment analysis
     * **Mood Tracking**: Log and visualize daily moods
     * **Safety First**: Multiple disclaimers, crisis resources, emergency hotlines
@@ -69,7 +71,7 @@ app = FastAPI(
     ## Endpoints
     
     * `/` - Health check
-    * `/api/chat` - Send message to AI
+    * `/api/chat` - Send message to AI (with RAG)
     * `/api/mood` - Log mood entry
     * `/api/mood/history` - Get mood history
     * `/api/analytics` - Get system analytics
@@ -132,6 +134,17 @@ class FeedbackRequest(BaseModel):
 async def startup_event():
     """Initialize on startup"""
     print("\n[STARTUP] Starting Neurobud API...")
+    
+    # Initialize RAG system
+    try:
+        from app.rag.vector_store import get_vector_store
+        vector_store = get_vector_store()
+        stats = vector_store.get_stats()
+        print(f"[RAG] Vector store loaded: {stats['total_articles']} articles")
+    except Exception as e:
+        print(f"[WARNING] RAG initialization failed: {e}")
+        print("[WARNING] Chat will work without knowledge base")
+    
     print("[OK] Initialization complete")
 
 @app.on_event("shutdown")
@@ -191,6 +204,8 @@ class ChatResponse(BaseModel):
     crisis_severity: Optional[str] = None
     tokens_used: int
     response_time_ms: float
+    rag_used: Optional[bool] = False
+    rag_sources_count: Optional[int] = 0
 
 class MoodRequest(BaseModel):
     mood_score: int
@@ -223,18 +238,28 @@ def root(db: Session = Depends(get_db)):
         print(f"[ERROR] Database connection failed: {e}")
         db_status = "disconnected"
     
+    # Check RAG status
+    try:
+        from app.rag.vector_store import get_vector_store
+        vector_store = get_vector_store()
+        rag_articles = vector_store.get_stats()['total_articles']
+        rag_status = f"ready ({rag_articles} articles)"
+    except Exception:
+        rag_status = "unavailable"
+    
     return {
         "status": "healthy",
         "service": "Neurobud API",
         "version": "1.0.0",
         "database": db_status,
+        "rag": rag_status,
         "timestamp": datetime.now().isoformat()
     }
 
 @app.post("/api/chat", response_model=ChatResponse)
 @limiter.limit("20/minute")
 def chat(chat_data: ChatRequest, request: Request, db: Session = Depends(get_db)):
-    """Chat with Neurobud AI"""
+    """Chat with Neurobud AI (with RAG enhancement)"""
     
     message = sanitize_text(chat_data.message)
     
@@ -300,23 +325,35 @@ def chat(chat_data: ChatRequest, request: Request, db: Session = Depends(get_db)
             "tokens_used": chat_engine.estimate_tokens(ai_response_text),
             "model": "crisis_protocol",
             "model_variant": "crisis",
-            "response_time_ms": 0
+            "response_time_ms": 0,
+            "rag_used": False,
+            "rag_sources": [],
+            "rag_context_articles": 0
         }
     else:
-        print(f"[CHAT] Using AI response with A/B testing")
+        print(f"[CHAT] Using AI response with A/B testing and RAG")
         
         if chat_data.user_email:
             user = db.query(User).filter(User.email == chat_data.user_email).first()
             if user:
                 user_id = user.id
         
+        # Call chat engine with RAG enabled
         ai_result = chat_engine.chat(
             message=message,
             conversation_history=conversation_history,
-            user_id=user_id
+            user_id=user_id,
+            use_rag=True  # Enable RAG
         )
         
         print(f"[A/B] Using {ai_result.get('model_variant', 'base')} model")
+        
+        # Log RAG usage
+        if ai_result.get("rag_used"):
+            sources_count = len(ai_result.get("rag_sources", []))
+            print(f"[RAG] Used {sources_count} knowledge base articles")
+            for source in ai_result.get("rag_sources", [])[:3]:  # Log first 3
+                print(f"  - {source.get('title')} ({source.get('category')})")
     
     assistant_message = Message(
         conversation_id=conversation.id,
@@ -359,13 +396,16 @@ def chat(chat_data: ChatRequest, request: Request, db: Session = Depends(get_db)
                 model=ai_result["model"]
             )
             
+            # Determine feature (chat vs chat_rag)
+            feature = "chat_rag" if ai_result.get("rag_used") else "chat"
+            
             # Save cost tracking
             api_cost = APICost(
                 user_id=user_id,
                 message_id=assistant_message.id,
                 conversation_id=conversation.id,
                 model=ai_result["model"],
-                feature="chat",
+                feature=feature,  # Track RAG usage
                 input_tokens=cost_data["input_tokens"],
                 output_tokens=cost_data["output_tokens"],
                 total_tokens=cost_data["total_tokens"],
@@ -377,7 +417,7 @@ def chat(chat_data: ChatRequest, request: Request, db: Session = Depends(get_db)
             db.add(api_cost)
             db.commit()
             
-            print(f"[COST] ${cost_data['total_cost']:.6f} - Input: {input_tokens}, Output: {output_tokens}")
+            print(f"[COST] ${cost_data['total_cost']:.6f} - Input: {input_tokens}, Output: {output_tokens}, Feature: {feature}")
         except Exception as cost_error:
             print(f"[WARNING] Cost tracking failed: {cost_error}")
             # Continue even if cost tracking fails
@@ -390,7 +430,9 @@ def chat(chat_data: ChatRequest, request: Request, db: Session = Depends(get_db)
         is_crisis=crisis_result["is_crisis"],
         crisis_severity=crisis_result["severity"] if crisis_result["is_crisis"] else None,
         tokens_used=ai_result["tokens_used"],
-        response_time_ms=ai_result.get("response_time_ms", 0)
+        response_time_ms=ai_result.get("response_time_ms", 0),
+        rag_used=ai_result.get("rag_used", False),
+        rag_sources_count=len(ai_result.get("rag_sources", []))
     )
 
 @app.post("/api/mood", response_model=MoodResponse)
@@ -484,6 +526,14 @@ def get_analytics(db: Session = Depends(get_db)):
     ).all()
     avg_mood = sum(m.mood_score for m in recent_moods) / len(recent_moods) if recent_moods else 0
     
+    # RAG stats
+    try:
+        from app.rag.vector_store import get_vector_store
+        vector_store = get_vector_store()
+        rag_articles = vector_store.get_stats()['total_articles']
+    except Exception:
+        rag_articles = 0
+    
     return {
         "total_conversations": total_conversations,
         "total_messages": total_messages,
@@ -491,6 +541,7 @@ def get_analytics(db: Session = Depends(get_db)):
         "total_crisis_events": total_crisis_events,
         "conversations_last_24h": recent_conversations,
         "avg_mood_last_7d": round(avg_mood, 1),
+        "rag_articles": rag_articles,
         "uptime": "99.9%",
         "version": "1.0.0"
     }
@@ -570,7 +621,7 @@ def get_cost_analytics(
     Returns:
         - Total spend
         - Daily breakdown
-        - Cost per feature
+        - Cost per feature (including chat_rag)
         - Budget status
         - Top users by cost
     """
@@ -593,7 +644,7 @@ def get_cost_analytics(
             APICost.created_at >= today_start
         ).scalar() or 0.0
         
-        # Cost by feature
+        # Cost by feature (now includes chat_rag)
         feature_costs = db.query(
             APICost.feature,
             func.sum(APICost.total_cost).label('cost'),
