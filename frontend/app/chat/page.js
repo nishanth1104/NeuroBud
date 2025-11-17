@@ -431,7 +431,6 @@ export default function ChatPage() {
             <div className="flex justify-start animate-fade-in">
               <div className="bg-white px-6 py-4 rounded-2xl shadow-md">
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl">🌱</span>
                   <div className="flex flex-col">
                     <div className="flex items-center gap-1 mb-1">
                       <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
