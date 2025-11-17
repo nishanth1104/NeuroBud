@@ -18,7 +18,11 @@ export default function SignIn() {
         {/* Logo */}
         <div className="text-center mb-8">
           <Link href="/" className="text-4xl font-bold text-blue-600 flex items-center justify-center gap-2">
-            🌱 Neurobud
+            <img 
+            src="/neurobud-logo.png" 
+            alt="Neurobud Logo" 
+            className="w-24 h-24"
+          /> Neurobud
           </Link>
           <p className="text-gray-600 mt-2">Sign in to continue your wellness journey</p>
         </div>

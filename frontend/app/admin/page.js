@@ -163,7 +163,11 @@ export default function AdminDashboard() {
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/" className="text-2xl font-bold text-blue-600">
-              🌱 Neurobud
+              <img 
+                src="/neurobud-logo.png" 
+                alt="Neurobud Logo" 
+                className="w-12 h-12 mx-auto mb-0"
+              /> Neurobud
             </Link>
             <span className="text-gray-400">|</span>
             <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded font-semibold">

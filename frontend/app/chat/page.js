@@ -215,7 +215,11 @@ export default function ChatPage() {
       <nav className="bg-white border-b shadow-sm">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/" className="text-2xl font-bold text-blue-600 flex items-center gap-2">
-            🌱 Neurobud
+            <img 
+              src="/neurobud-logo.png" 
+              alt="Neurobud Logo" 
+              className="w-12 h-12 mx-auto mb-0"
+            /> Neurobud
           </Link>
           <div className="flex items-center gap-4">
             <Link href="/chat" className="text-blue-600 font-semibold border-b-2 border-blue-600">
@@ -308,7 +312,7 @@ export default function ChatPage() {
                 <div className="flex flex-col items-start gap-2 animate-fade-in group">
                   <div className="flex items-start gap-3 w-full">
                     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold flex-shrink-0">
-                      AI
+                      NB
                     </div>
                     <div className={`flex-1 max-w-3xl px-6 py-4 rounded-2xl rounded-tl-none ${
                       message.is_crisis

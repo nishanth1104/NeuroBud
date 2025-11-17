@@ -192,7 +192,11 @@ export default function MoodPage() {
         <nav className="bg-white border-b shadow-sm">
           <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
             <Link href="/" className="text-2xl font-bold text-blue-600 flex items-center gap-2">
-              🌱 Neurobud
+              <img 
+                src="/neurobud-logo.png" 
+                alt="Neurobud Logo" 
+                className="w-12 h-12 mx-auto mb-0"
+              /> Neurobud
             </Link>
             <div className="flex items-center gap-4">
               <Link href="/chat" className="text-gray-600 hover:text-blue-600 font-medium">
