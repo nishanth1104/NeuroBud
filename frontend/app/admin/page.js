@@ -10,7 +10,7 @@ import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Cart
 export default function AdminDashboard() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState('analytics') // 'analytics', 'cost', or 'users'
+  const [activeTab, setActiveTab] = useState('analytics') // 'analytics', 'cost', 'users', or 'database'
   const [stats, setStats] = useState(null)
   const [abStats, setAbStats] = useState(null)
   const [analytics, setAnalytics] = useState(null)
@@ -24,6 +24,12 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState([])
   const [usersLoading, setUsersLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(null) // Track which user action is loading
+
+  // Database viewer state
+  const [dbTables, setDbTables] = useState([])
+  const [selectedTable, setSelectedTable] = useState(null)
+  const [tableData, setTableData] = useState(null)
+  const [dbLoading, setDbLoading] = useState(false)
 
   // Check if user is admin
   useEffect(() => {
@@ -177,6 +183,58 @@ export default function AdminDashboard() {
       fetchUsers()
     }
   }, [isAdmin, activeTab])
+
+  // Fetch database tables
+  const fetchDatabaseTables = async () => {
+    try {
+      setDbLoading(true)
+      const response = await axios.get(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/database/tables?current_user_email=${session.user.email}`
+      )
+      setDbTables(response.data.tables || [])
+      // Auto-select first table if none selected
+      if (!selectedTable && response.data.tables?.length > 0) {
+        setSelectedTable(response.data.tables[0].name)
+      }
+    } catch (error) {
+      console.error('Error fetching database tables:', error)
+      alert('Failed to fetch database tables')
+    } finally {
+      setDbLoading(false)
+    }
+  }
+
+  // Fetch specific table data
+  const fetchTableData = async (tableName) => {
+    if (!tableName) return
+
+    try {
+      setDbLoading(true)
+      const response = await axios.get(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/database/tables/${tableName}?current_user_email=${session.user.email}&limit=100`
+      )
+      setTableData(response.data)
+    } catch (error) {
+      console.error('Error fetching table data:', error)
+      alert(`Failed to fetch ${tableName} data`)
+    } finally {
+      setDbLoading(false)
+    }
+  }
+
+  // Load database when switching to database tab
+  useEffect(() => {
+    if (isAdmin && activeTab === 'database') {
+      fetchDatabaseTables()
+    }
+  }, [isAdmin, activeTab])
+
+  // Load table data when table is selected
+  useEffect(() => {
+    if (selectedTable && activeTab === 'database') {
+      fetchTableData(selectedTable)
+    }
+  }, [selectedTable, activeTab])
 
   // Prepare data for charts
   const getModelComparisonData = () => {
@@ -344,6 +402,16 @@ export default function AdminDashboard() {
               }`}
             >
               👥 User Management
+            </button>
+            <button
+              onClick={() => setActiveTab('database')}
+              className={`px-6 py-3 font-semibold transition-all ${
+                activeTab === 'database'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              🗄️ Database Viewer
             </button>
           </div>
         </div>
@@ -951,6 +1019,223 @@ export default function AdminDashboard() {
                     <li>Deleting a user is PERMANENT and cannot be undone</li>
                     <li>Blocked users cannot sign in to the application</li>
                     <li>Removing admin status will revoke access to this dashboard</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Database Viewer */}
+        {activeTab === 'database' && (
+          <>
+            {/* Table Statistics Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+              {dbTables.slice(0, 4).map((table) => (
+                <div key={table.name} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                  <div className="text-sm text-gray-600 mb-1">{table.display_name}</div>
+                  <div className="text-3xl font-bold text-gray-800">
+                    {table.row_count}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-2">{table.description}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Table Selector and Controls */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-8">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4 flex-1">
+                    <label className="text-sm font-semibold text-gray-700">Select Table:</label>
+                    <select
+                      value={selectedTable || ''}
+                      onChange={(e) => setSelectedTable(e.target.value)}
+                      className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      {dbTables.map((table) => (
+                        <option key={table.name} value={table.name}>
+                          {table.display_name} ({table.row_count} rows)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    onClick={() => fetchTableData(selectedTable)}
+                    disabled={dbLoading || !selectedTable}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+                  >
+                    🔄 {dbLoading ? 'Loading...' : 'Refresh'}
+                  </button>
+                </div>
+
+                {tableData && (
+                  <div className="mt-4 flex items-center gap-4 text-sm text-gray-600">
+                    <span>
+                      <strong>Total Rows:</strong> {tableData.total_rows}
+                    </span>
+                    <span>
+                      <strong>Columns:</strong> {tableData.columns?.length}
+                    </span>
+                    <span>
+                      <strong>Showing:</strong> {tableData.data?.length} of {tableData.total_rows}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Table Data Display */}
+              {dbLoading && !tableData ? (
+                <div className="p-12 text-center">
+                  <div className="text-4xl mb-4 animate-spin">⚙️</div>
+                  <p className="text-gray-600">Loading table data...</p>
+                </div>
+              ) : !tableData ? (
+                <div className="p-12 text-center">
+                  <div className="text-4xl mb-4">🗄️</div>
+                  <p className="text-gray-600">Select a table to view its data</p>
+                </div>
+              ) : tableData.data?.length === 0 ? (
+                <div className="p-12 text-center">
+                  <div className="text-4xl mb-4">📭</div>
+                  <p className="text-gray-600">No data in this table</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        {tableData.columns?.map((col) => (
+                          <th
+                            key={col.name}
+                            className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider"
+                          >
+                            {col.name}
+                            {col.primary_key && (
+                              <span className="ml-1 text-blue-600" title="Primary Key">🔑</span>
+                            )}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {tableData.data?.map((row, idx) => (
+                        <tr key={idx} className="hover:bg-gray-50">
+                          {tableData.columns?.map((col) => {
+                            const value = row[col.name]
+                            let displayValue = value
+
+                            // Format different data types
+                            if (value === null || value === undefined) {
+                              displayValue = <span className="text-gray-400 italic">null</span>
+                            } else if (typeof value === 'boolean') {
+                              displayValue = value ? (
+                                <span className="text-green-600 font-semibold">✓ true</span>
+                              ) : (
+                                <span className="text-red-600 font-semibold">✗ false</span>
+                              )
+                            } else if (col.name.includes('created_at') || col.name.includes('updated_at') || col.name.includes('last_login')) {
+                              displayValue = value ? new Date(value).toLocaleString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              }) : <span className="text-gray-400 italic">never</span>
+                            } else if (col.name === 'content' && typeof value === 'string' && value.length > 100) {
+                              displayValue = (
+                                <div className="max-w-md">
+                                  <div className="truncate" title={value}>
+                                    {value}
+                                  </div>
+                                </div>
+                              )
+                            } else if (typeof value === 'number' && col.name.includes('cost')) {
+                              displayValue = `$${value.toFixed(4)}`
+                            }
+
+                            return (
+                              <td key={col.name} className="px-4 py-3 text-sm text-gray-700">
+                                {displayValue}
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* All Tables Overview */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+              <div className="p-6 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-800">All Database Tables</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Table Name
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Description
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Row Count
+                      </th>
+                      <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {dbTables.map((table) => (
+                      <tr key={table.name} className={selectedTable === table.name ? 'bg-blue-50' : 'hover:bg-gray-50'}>
+                        <td className="px-6 py-4 font-medium text-gray-800">
+                          {table.display_name}
+                          {selectedTable === table.name && (
+                            <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                              Selected
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {table.description}
+                        </td>
+                        <td className="px-6 py-4 text-sm">
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">
+                            {table.row_count} rows
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            onClick={() => setSelectedTable(table.name)}
+                            className="px-3 py-1.5 text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg transition-all"
+                          >
+                            View Data
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Info Notice */}
+            <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-6">
+              <div className="flex items-start gap-3">
+                <div className="text-2xl">ℹ️</div>
+                <div>
+                  <h4 className="font-semibold text-blue-900 mb-2">Database Viewer Information</h4>
+                  <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
+                    <li>Viewing production database in read-only mode</li>
+                    <li>Showing up to 100 most recent records per table</li>
+                    <li>Data refreshes when you switch tables or click refresh</li>
+                    <li>Sensitive data (like passwords) is not shown for security</li>
                   </ul>
                 </div>
               </div>

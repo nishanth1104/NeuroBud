@@ -1019,3 +1019,152 @@ def delete_user(user_id: int, current_user_email: str, db: Session = Depends(get
         "message": f"User {user_email} has been permanently deleted",
         "deleted_user_id": user_id
     }
+
+# ==================== DATABASE VIEWER ENDPOINTS ====================
+
+@app.get("/api/admin/database/tables")
+def get_database_tables(current_user_email: str, db: Session = Depends(get_db)):
+    """Get list of all database tables with row counts (admin only)"""
+    # Check if requester is admin
+    admin = db.query(User).filter(User.email == current_user_email).first()
+    if not admin or not admin.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    # Define all tables with their models
+    tables_info = [
+        {
+            "name": "users",
+            "display_name": "Users",
+            "model": User,
+            "description": "User accounts and authentication"
+        },
+        {
+            "name": "conversations",
+            "display_name": "Conversations",
+            "model": Conversation,
+            "description": "Chat conversations with AI"
+        },
+        {
+            "name": "messages",
+            "display_name": "Messages",
+            "model": Message,
+            "description": "Individual messages in conversations"
+        },
+        {
+            "name": "mood_entries",
+            "display_name": "Mood Entries",
+            "model": MoodEntry,
+            "description": "User mood tracking entries"
+        },
+        {
+            "name": "crisis_events",
+            "display_name": "Crisis Events",
+            "model": CrisisEvent,
+            "description": "Detected crisis situations"
+        },
+        {
+            "name": "model_responses",
+            "display_name": "Model Responses",
+            "model": ModelResponse,
+            "description": "A/B testing model responses"
+        },
+        {
+            "name": "api_costs",
+            "display_name": "API Costs",
+            "model": APICost,
+            "description": "API usage and costs tracking"
+        }
+    ]
+
+    # Get row counts for each table
+    tables_with_counts = []
+    for table in tables_info:
+        try:
+            count = db.query(table["model"]).count()
+            tables_with_counts.append({
+                "name": table["name"],
+                "display_name": table["display_name"],
+                "description": table["description"],
+                "row_count": count
+            })
+        except Exception as e:
+            tables_with_counts.append({
+                "name": table["name"],
+                "display_name": table["display_name"],
+                "description": table["description"],
+                "row_count": 0,
+                "error": str(e)
+            })
+
+    return {
+        "total_tables": len(tables_with_counts),
+        "tables": tables_with_counts
+    }
+
+@app.get("/api/admin/database/tables/{table_name}")
+def get_table_data(
+    table_name: str,
+    current_user_email: str,
+    limit: int = 100,
+    offset: int = 0,
+    db: Session = Depends(get_db)
+):
+    """Get data from a specific table (admin only)"""
+    # Check if requester is admin
+    admin = db.query(User).filter(User.email == current_user_email).first()
+    if not admin or not admin.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    # Map table names to models
+    table_models = {
+        "users": User,
+        "conversations": Conversation,
+        "messages": Message,
+        "mood_entries": MoodEntry,
+        "crisis_events": CrisisEvent,
+        "model_responses": ModelResponse,
+        "api_costs": APICost
+    }
+
+    if table_name not in table_models:
+        raise HTTPException(status_code=404, detail=f"Table '{table_name}' not found")
+
+    model = table_models[table_name]
+
+    # Get total count
+    total_count = db.query(model).count()
+
+    # Get paginated data
+    records = db.query(model).order_by(model.id.desc()).limit(limit).offset(offset).all()
+
+    # Convert records to dictionaries
+    data = []
+    for record in records:
+        record_dict = {}
+        for column in record.__table__.columns:
+            value = getattr(record, column.name)
+            # Convert datetime to ISO string
+            if isinstance(value, datetime):
+                value = value.isoformat()
+            record_dict[column.name] = value
+        data.append(record_dict)
+
+    # Get column information
+    columns = [
+        {
+            "name": col.name,
+            "type": str(col.type),
+            "nullable": col.nullable,
+            "primary_key": col.primary_key
+        }
+        for col in model.__table__.columns
+    ]
+
+    return {
+        "table_name": table_name,
+        "total_rows": total_count,
+        "limit": limit,
+        "offset": offset,
+        "columns": columns,
+        "data": data
+    }
