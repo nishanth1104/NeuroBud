@@ -264,7 +264,7 @@ export default function AdminDashboard() {
               <img 
                 src="/neurobud-logo.png" 
                 alt="Neurobud Logo" 
-                className="w-12 h-12"
+                className="w-12 h-12 mx-auto mb-0"
               /> Neurobud
             </Link>
             <span className="text-gray-400">|</span>
