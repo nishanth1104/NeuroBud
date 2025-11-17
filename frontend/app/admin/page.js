@@ -10,7 +10,7 @@ import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Cart
 export default function AdminDashboard() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState('analytics') // 'analytics' or 'cost'
+  const [activeTab, setActiveTab] = useState('analytics') // 'analytics', 'cost', or 'users'
   const [stats, setStats] = useState(null)
   const [abStats, setAbStats] = useState(null)
   const [analytics, setAnalytics] = useState(null)
@@ -19,6 +19,11 @@ export default function AdminDashboard() {
   const [lastUpdated, setLastUpdated] = useState(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [checking, setChecking] = useState(true)
+
+  // User management state
+  const [users, setUsers] = useState([])
+  const [usersLoading, setUsersLoading] = useState(false)
+  const [actionLoading, setActionLoading] = useState(null) // Track which user action is loading
 
   // Check if user is admin
   useEffect(() => {
@@ -79,6 +84,99 @@ export default function AdminDashboard() {
       return () => clearInterval(interval)
     }
   }, [isAdmin])
+
+  // Fetch all users
+  const fetchUsers = async () => {
+    try {
+      setUsersLoading(true)
+      const response = await axios.get(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/users?current_user_email=${session.user.email}`
+      )
+      setUsers(response.data.users || [])
+    } catch (error) {
+      console.error('Error fetching users:', error)
+      alert('Failed to fetch users')
+    } finally {
+      setUsersLoading(false)
+    }
+  }
+
+  // Toggle admin status
+  const toggleAdmin = async (userId, currentStatus) => {
+    if (!confirm(`Are you sure you want to ${currentStatus ? 'remove admin from' : 'make admin'} this user?`)) {
+      return
+    }
+
+    try {
+      setActionLoading(`admin-${userId}`)
+      const response = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/users/${userId}/toggle-admin?current_user_email=${session.user.email}`
+      )
+      alert(response.data.message)
+      fetchUsers() // Refresh the list
+    } catch (error) {
+      console.error('Error toggling admin:', error)
+      alert(error.response?.data?.detail || 'Failed to update admin status')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  // Toggle active status
+  const toggleActive = async (userId, currentStatus) => {
+    if (!confirm(`Are you sure you want to ${currentStatus ? 'block' : 'unblock'} this user?`)) {
+      return
+    }
+
+    try {
+      setActionLoading(`active-${userId}`)
+      const response = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/users/${userId}/toggle-active?current_user_email=${session.user.email}`
+      )
+      alert(response.data.message)
+      fetchUsers() // Refresh the list
+    } catch (error) {
+      console.error('Error toggling active status:', error)
+      alert(error.response?.data?.detail || 'Failed to update active status')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  // Delete user
+  const deleteUser = async (userId, userEmail) => {
+    if (!confirm(`⚠️ DANGER: Are you sure you want to PERMANENTLY DELETE ${userEmail}?\n\nThis action CANNOT be undone!`)) {
+      return
+    }
+
+    // Double confirmation for safety
+    const confirmText = prompt(`Type "DELETE" to confirm permanent deletion of ${userEmail}:`)
+    if (confirmText !== 'DELETE') {
+      alert('Deletion cancelled.')
+      return
+    }
+
+    try {
+      setActionLoading(`delete-${userId}`)
+      const response = await axios.delete(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/users/${userId}?current_user_email=${session.user.email}`
+      )
+      alert(response.data.message)
+      fetchUsers() // Refresh the list
+    } catch (error) {
+      console.error('Error deleting user:', error)
+      alert(error.response?.data?.detail || 'Failed to delete user')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  // Load users when switching to users tab
+  useEffect(() => {
+    if (isAdmin && activeTab === 'users') {
+      fetchUsers()
+    }
+  }, [isAdmin, activeTab])
 
   // Prepare data for charts
   const getModelComparisonData = () => {
@@ -236,6 +334,16 @@ export default function AdminDashboard() {
               }`}
             >
               💰 Cost Dashboard
+            </button>
+            <button
+              onClick={() => setActiveTab('users')}
+              className={`px-6 py-3 font-semibold transition-all ${
+                activeTab === 'users'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              👥 User Management
             </button>
           </div>
         </div>
@@ -626,6 +734,227 @@ export default function AdminDashboard() {
                 </div>
               </div>
             )}
+          </>
+        )}
+
+        {/* User Management Dashboard */}
+        {activeTab === 'users' && (
+          <>
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                <div className="text-sm text-gray-600 mb-1">Total Users</div>
+                <div className="text-3xl font-bold text-gray-800">
+                  {users.length}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                <div className="text-sm text-gray-600 mb-1">Admin Users</div>
+                <div className="text-3xl font-bold text-purple-600">
+                  {users.filter(u => u.is_admin).length}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                <div className="text-sm text-gray-600 mb-1">Active Users</div>
+                <div className="text-3xl font-bold text-green-600">
+                  {users.filter(u => u.is_active).length}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                <div className="text-sm text-gray-600 mb-1">Blocked Users</div>
+                <div className="text-3xl font-bold text-red-600">
+                  {users.filter(u => !u.is_active).length}
+                </div>
+              </div>
+            </div>
+
+            {/* Users Table */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+              <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-800">All Users</h3>
+                <button
+                  onClick={fetchUsers}
+                  disabled={usersLoading}
+                  className="text-blue-600 hover:text-blue-700 font-medium text-sm disabled:opacity-50"
+                >
+                  🔄 {usersLoading ? 'Loading...' : 'Refresh'}
+                </button>
+              </div>
+
+              {usersLoading && !users.length ? (
+                <div className="p-12 text-center">
+                  <div className="text-4xl mb-4 animate-spin">⚙️</div>
+                  <p className="text-gray-600">Loading users...</p>
+                </div>
+              ) : users.length === 0 ? (
+                <div className="p-12 text-center">
+                  <div className="text-4xl mb-4">👤</div>
+                  <p className="text-gray-600">No users found</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                          User
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                          Provider
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                          Role
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                          Joined
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                          Last Login
+                        </th>
+                        <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {users.map((user) => {
+                        const isCurrentUser = user.email === session?.user?.email
+                        return (
+                          <tr key={user.id} className={isCurrentUser ? 'bg-blue-50' : 'hover:bg-gray-50'}>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white flex items-center justify-center font-bold">
+                                  {user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
+                                </div>
+                                <div>
+                                  <div className="font-medium text-gray-800">
+                                    {user.name || 'No name'}
+                                    {isCurrentUser && (
+                                      <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                                        You
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-sm text-gray-500">{user.email}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="inline-flex items-center gap-1 text-sm capitalize">
+                                {user.provider === 'google' ? '🔵' : '⚫'} {user.provider}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              {user.is_active ? (
+                                <span className="inline-flex items-center gap-1 text-sm text-green-700 bg-green-100 px-3 py-1 rounded-full font-medium">
+                                  ✓ Active
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-sm text-red-700 bg-red-100 px-3 py-1 rounded-full font-medium">
+                                  ✗ Blocked
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              {user.is_admin ? (
+                                <span className="inline-flex items-center gap-1 text-sm text-purple-700 bg-purple-100 px-3 py-1 rounded-full font-medium">
+                                  ⚙️ Admin
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-sm text-gray-700 bg-gray-100 px-3 py-1 rounded-full font-medium">
+                                  👤 User
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-600">
+                              {new Date(user.created_at).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric'
+                              })}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-600">
+                              {user.last_login ? (
+                                new Date(user.last_login).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric'
+                                })
+                              ) : (
+                                <span className="text-gray-400">Never</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center justify-end gap-2">
+                                {/* Toggle Admin Button */}
+                                <button
+                                  onClick={() => toggleAdmin(user.id, user.is_admin)}
+                                  disabled={isCurrentUser || actionLoading === `admin-${user.id}`}
+                                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                                    user.is_admin
+                                      ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                      : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                  title={isCurrentUser ? 'Cannot modify your own admin status' : user.is_admin ? 'Remove admin' : 'Make admin'}
+                                >
+                                  {actionLoading === `admin-${user.id}` ? '...' : user.is_admin ? 'Remove Admin' : 'Make Admin'}
+                                </button>
+
+                                {/* Toggle Active Button */}
+                                <button
+                                  onClick={() => toggleActive(user.id, user.is_active)}
+                                  disabled={isCurrentUser || actionLoading === `active-${user.id}`}
+                                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                                    user.is_active
+                                      ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                                      : 'bg-green-100 text-green-700 hover:bg-green-200'
+                                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                  title={isCurrentUser ? 'Cannot block yourself' : user.is_active ? 'Block user' : 'Unblock user'}
+                                >
+                                  {actionLoading === `active-${user.id}` ? '...' : user.is_active ? 'Block' : 'Unblock'}
+                                </button>
+
+                                {/* Delete Button */}
+                                <button
+                                  onClick={() => deleteUser(user.id, user.email)}
+                                  disabled={isCurrentUser || actionLoading === `delete-${user.id}`}
+                                  className="px-3 py-1.5 text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title={isCurrentUser ? 'Cannot delete yourself' : 'Permanently delete user'}
+                                >
+                                  {actionLoading === `delete-${user.id}` ? '...' : 'Delete'}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Warning Notice */}
+            <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-xl p-6">
+              <div className="flex items-start gap-3">
+                <div className="text-2xl">⚠️</div>
+                <div>
+                  <h4 className="font-semibold text-yellow-900 mb-2">Important Safety Notes</h4>
+                  <ul className="text-sm text-yellow-800 space-y-1 list-disc list-inside">
+                    <li>You cannot modify your own admin status, block yourself, or delete your own account</li>
+                    <li>Deleting a user is PERMANENT and cannot be undone</li>
+                    <li>Blocked users cannot sign in to the application</li>
+                    <li>Removing admin status will revoke access to this dashboard</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           </>
         )}
 

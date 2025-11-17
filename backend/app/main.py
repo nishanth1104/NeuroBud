@@ -906,3 +906,116 @@ def make_me_admin(user_email: str, secret: str, db: Session = Depends(get_db)):
             "name": user.name
         }
     }
+
+# ==================== USER MANAGEMENT ENDPOINTS ====================
+
+@app.get("/api/admin/users")
+def get_all_users(current_user_email: str, db: Session = Depends(get_db)):
+    """Get all users (admin only)"""
+    # Check if requester is admin
+    admin = db.query(User).filter(User.email == current_user_email).first()
+    if not admin or not admin.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    users = db.query(User).all()
+
+    return {
+        "total": len(users),
+        "users": [
+            {
+                "id": u.id,
+                "email": u.email,
+                "name": u.name,
+                "provider": u.provider,
+                "is_admin": u.is_admin,
+                "is_active": u.is_active,
+                "created_at": u.created_at,
+                "last_login": u.last_login,
+                "avatar_url": u.avatar_url
+            }
+            for u in users
+        ]
+    }
+
+@app.post("/api/admin/users/{user_id}/toggle-admin")
+def toggle_admin_status(user_id: int, current_user_email: str, db: Session = Depends(get_db)):
+    """Toggle admin status for a user (admin only)"""
+    # Check if requester is admin
+    admin = db.query(User).filter(User.email == current_user_email).first()
+    if not admin or not admin.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Prevent removing your own admin status
+    if user.id == admin.id and user.is_admin:
+        raise HTTPException(status_code=400, detail="Cannot remove your own admin status")
+
+    user.is_admin = not user.is_admin
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "message": f"User {user.email} is now {'an admin' if user.is_admin else 'not an admin'}",
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "is_admin": user.is_admin
+        }
+    }
+
+@app.post("/api/admin/users/{user_id}/toggle-active")
+def toggle_active_status(user_id: int, current_user_email: str, db: Session = Depends(get_db)):
+    """Block/Unblock a user (admin only)"""
+    # Check if requester is admin
+    admin = db.query(User).filter(User.email == current_user_email).first()
+    if not admin or not admin.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Prevent blocking yourself
+    if user.id == admin.id:
+        raise HTTPException(status_code=400, detail="Cannot block yourself")
+
+    user.is_active = not user.is_active
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "message": f"User {user.email} is now {'active' if user.is_active else 'blocked'}",
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "is_active": user.is_active
+        }
+    }
+
+@app.delete("/api/admin/users/{user_id}")
+def delete_user(user_id: int, current_user_email: str, db: Session = Depends(get_db)):
+    """Delete a user permanently (admin only) - WARNING: This deletes all user data!"""
+    # Check if requester is admin
+    admin = db.query(User).filter(User.email == current_user_email).first()
+    if not admin or not admin.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Prevent deleting yourself
+    if user.id == admin.id:
+        raise HTTPException(status_code=400, detail="Cannot delete yourself")
+
+    user_email = user.email
+    db.delete(user)
+    db.commit()
+
+    return {
+        "message": f"User {user_email} has been permanently deleted",
+        "deleted_user_id": user_id
+    }
