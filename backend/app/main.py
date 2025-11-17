@@ -767,33 +767,44 @@ def cleanup_old_data(days: int = 90, db: Session = Depends(get_db)):
 @app.post("/api/auth/login")
 def user_login(user_data: UserLoginRequest, db: Session = Depends(get_db)):
     """Handle OAuth login"""
-    
+
     user = db.query(User).filter(User.provider_id == user_data.provider_id).first()
-    
+
     if user:
+        # Check if user is blocked
+        if not user.is_active:
+            raise HTTPException(
+                status_code=403,
+                detail="Your account has been blocked by an administrator. Please contact support for assistance."
+            )
+
         user.last_login = datetime.now()
         user.name = user_data.name
         user.avatar_url = user_data.avatar_url
         db.commit()
         db.refresh(user)
     else:
+        # Create new user (always active by default)
         user = User(
             email=user_data.email,
             name=user_data.name,
             provider=user_data.provider,
             provider_id=user_data.provider_id,
             avatar_url=user_data.avatar_url,
-            last_login=datetime.now()
+            last_login=datetime.now(),
+            is_active=True  # New users are active by default
         )
         db.add(user)
         db.commit()
         db.refresh(user)
-    
+
     return {
         "id": user.id,
         "email": user.email,
         "name": user.name,
         "avatar_url": user.avatar_url,
+        "is_active": user.is_active,
+        "is_admin": user.is_admin,
         "created_at": user.created_at
     }
 
