@@ -874,3 +874,35 @@ def check_admin(user_email: str, db: Session = Depends(get_db)):
             "name": user.name
         }
     }
+
+@app.post("/api/auth/make-me-admin")
+def make_me_admin(user_email: str, secret: str, db: Session = Depends(get_db)):
+    """
+    Temporary endpoint to make a user admin.
+    DELETE THIS AFTER USE for security!
+    """
+    # Simple secret to prevent abuse - use a random string
+    if secret != "temp-admin-nishanth-2024":
+        raise HTTPException(status_code=403, detail="Invalid secret")
+
+    user = db.query(User).filter(User.email == user_email).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail=f"User {user_email} not found. Sign in first.")
+
+    if user.is_admin:
+        return {"message": f"{user_email} is already an admin!", "is_admin": True}
+
+    user.is_admin = True
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "message": f"SUCCESS! {user_email} is now an admin!",
+        "is_admin": user.is_admin,
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "name": user.name
+        }
+    }
