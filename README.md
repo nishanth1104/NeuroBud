@@ -115,6 +115,15 @@ NeuroBud was built to bridge the gap between crisis moments and professional car
 - **Frontend Hosting:** Vercel
 - **Environment Management:** python-dotenv, .env files
 
+### AI Stack
+- **LLM:** OpenAI GPT-4o-mini API
+- **Vector Database:** ChromaDB 0.4.22 (for RAG system)
+- **Fine-Tuning:** Custom mental health model training capabilities
+- **Crisis Detection:** Rule-based keyword detection with severity classification
+- **Sentiment Analysis:** Planned NLP-powered emotion detection (V2.0)
+- **Context Management:** Conversation history tracking with SQLAlchemy
+- **Prompt Engineering:** Empathetic response optimization
+
 ---
 
 ## 📊 Current Performance Metrics
