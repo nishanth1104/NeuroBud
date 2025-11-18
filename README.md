@@ -1,6 +1,4 @@
-# 🌱 Neurobud - AI Mental Wellness Companion
-
-> An empathetic AI chatbot providing mental health support, crisis detection, and mood tracking.
+# 🌱 NeuroBud - AI Mental Wellness Companion
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
@@ -11,8 +9,7 @@
 
 ## ⚠️ Important Disclaimer
 
-**Neurobud is NOT a replacement for professional mental health care.** It is an AI companion for emotional support and wellness tracking. If you're experiencing a mental health crisis, please:
-
+**NeuroBud is NOT a replacement for professional mental health care.** If you're experiencing a mental health crisis:
 - 🆘 **Call 988** (Suicide & Crisis Lifeline - US)
 - 🏥 **Call 911** for immediate emergencies
 - 💬 **Text "HELLO" to 741741** (Crisis Text Line)
@@ -20,238 +17,274 @@
 
 ---
 
-## ✨ Features
+## 🎯 The Problem
 
-### 🤖 AI-Powered Chat
-- Empathetic conversations using OpenAI GPT-4o-mini
+Mental health challenges affect **1 in 5 adults** globally, yet access to timely, affordable, and stigma-free support remains a significant barrier:
+
+- **Long Wait Times:** Average wait for a therapist appointment is 4-6 weeks
+- **High Costs:** Therapy sessions can cost $100-$200 per hour without insurance
+- **Stigma & Privacy:** Many people hesitate to seek help due to social stigma
+- **24/7 Availability:** Mental health crises don't follow business hours
+- **Early Intervention:** Many people need someone to talk to before reaching crisis point
+
+Traditional mental health services, while essential, often fail to provide immediate, accessible, and judgment-free support for those in need.
+
+---
+
+## 💡 Why NeuroBud?
+
+NeuroBud was built to bridge the gap between crisis moments and professional care by providing:
+
+✅ **Immediate Support:** 24/7 availability with AI-powered empathetic conversations
+✅ **Privacy-First:** Anonymous, stigma-free space to express emotions
+✅ **Crisis Detection:** Real-time monitoring with automatic safety interventions
+✅ **Mood Tracking:** Daily check-ins to identify patterns and trends
+✅ **Resource Connection:** Quick access to crisis hotlines and coping strategies
+✅ **Accessibility:** Free, web-based platform requiring no downloads
+
+**NeuroBud is not therapy** - it's a companion that provides emotional support, tracks mental wellness, and connects users to professional help when needed.
+
+---
+
+## ✨ Features (Version 1.0)
+
+### 🤖 AI-Powered Empathetic Chat
+- Natural conversations using OpenAI GPT-4o-mini
 - Context-aware responses with conversation history
-- Natural language understanding
 - Average response time: <3 seconds
+- Emotionally intelligent language understanding
 
 ### 🚨 Real-Time Crisis Detection
-- Keyword-based detection system
+- Keyword-based detection system analyzing user messages
 - Three severity levels: Low, Moderate, Critical
-- Automatic 988 hotline recommendations
+- Automatic 988 Lifeline recommendations for critical cases
 - Crisis event logging for safety monitoring
 
-### 📊 Mood Tracking
-- Daily mood logging (1-10 scale)
-- 7-day mood history visualization
-- Optional notes for context
-- Trend analysis and insights
+### 📊 Daily Mood Tracking
+- Simple 1-10 mood scale logging
+- 7-day mood history with visual charts
+- Optional notes for context and reflection
+- Trend identification for self-awareness
 
 ### 🎯 Mental Health Resources
-- National crisis hotlines
-- CBT coping strategies
-- Breathing exercises
-- Grounding techniques
-- Professional therapist finder
+- National crisis hotlines (988, Crisis Text Line, NAMI)
+- Evidence-based CBT coping strategies
+- Breathing exercises and grounding techniques
+- Professional therapist finder links
 
-### 🛡️ Safety Features
-- Multiple safety disclaimers
-- Rate limiting (20 chat/min, 10 mood/min)
+### 🔐 User Authentication & Admin Panel
+- Secure OAuth authentication (Google, GitHub)
+- User profile management
+- Admin dashboard for monitoring and analytics
+- User management capabilities
+
+### 🛡️ Safety & Security
 - Input sanitization (XSS protection)
-- Error handling and validation
-- Offline detection
+- Rate limiting (20 chat/min, 10 mood/min)
+- SQL injection prevention via ORM
+- Error boundaries and offline detection
+- Multiple safety disclaimers throughout the app
 
 ---
 
 ## 🏗️ Tech Stack
 
 ### Backend
-- **Framework:** FastAPI 0.104+
-- **Database:** PostgreSQL (Supabase) / SQLite
-- **AI:** OpenAI GPT-4o-mini
-- **ORM:** SQLAlchemy 2.0
-- **Testing:** pytest (7 tests, 100% passing)
-- **Rate Limiting:** SlowAPI
+- **Framework:** FastAPI 0.104+ (Python 3.12)
+- **Database:** PostgreSQL (Supabase) with SQLAlchemy 2.0 ORM
+- **AI Engine:** OpenAI GPT-4o-mini API
+- **Authentication:** NextAuth.js integration
+- **Rate Limiting:** SlowAPI (IP-based throttling)
+- **Vector Database:** ChromaDB 0.4.22 (for RAG capabilities)
+- **Testing:** pytest with 100% passing tests
+- **Deployment:** Railway (production backend)
 
 ### Frontend
-- **Framework:** Next.js 14 (App Router)
-- **Styling:** Tailwind CSS
-- **HTTP Client:** Axios
-- **Deployment:** Vercel-ready
+- **Framework:** Next.js 14 (App Router, React 18)
+- **Styling:** Tailwind CSS 3.3
+- **Authentication:** NextAuth.js (OAuth providers)
+- **Data Visualization:** Recharts 3.4
+- **HTTP Client:** Axios 1.13
+- **Markdown Rendering:** react-markdown 10.1
+- **Deployment:** Vercel (production frontend)
+
+### DevOps & Infrastructure
+- **Version Control:** Git & GitHub
+- **Database Hosting:** Supabase (PostgreSQL)
+- **Backend Hosting:** Railway
+- **Frontend Hosting:** Vercel
+- **Environment Management:** python-dotenv, .env files
 
 ---
 
-## 📊 Performance Metrics
+## 📊 Current Performance Metrics
 
-| Metric | Value | Target | Status |
-|--------|-------|--------|--------|
-| Health Check | 3.84ms | <10ms | ✅ |
-| Mood Logging | 12.78ms | <100ms | ✅ |
-| Mood History | 5.69ms | <200ms | ✅ |
-| Analytics | 9.60ms | <200ms | ✅ |
-| Test Coverage | 100% | 80%+ | ✅ |
+| Metric | Value | Status |
+|--------|-------|--------|
+| Health Check Response | 3.84ms | ✅ |
+| Mood Logging | 12.78ms | ✅ |
+| Mood History Retrieval | 5.69ms | ✅ |
+| Analytics Query | 9.60ms | ✅ |
+| Test Coverage | 100% | ✅ |
+| Chat Response Time | <3s | ✅ |
 
 ---
 
-## 🚀 Quick Start
+## 🔮 Roadmap: Version 2.0 (Coming Soon)
 
-### Prerequisites
-- Python 3.12+
-- Node.js 18+
-- OpenAI API Key
-- PostgreSQL or Supabase account
+NeuroBud Version 2.0 will include major enhancements focused on personalization, advanced analytics, and security:
 
-### Backend Setup
-```bash
-cd backend
+### 🎨 Enhanced User Experience
+- **Mobile Responsive Design:** Fully optimized for smartphones and tablets
+- **Progressive Web App (PWA):** Installable app with offline capabilities
+- **Dark Mode:** Reduce eye strain with customizable themes
+- **Multi-language Support:** Accessibility for non-English speakers
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: .\venv\Scripts\Activate.ps1
+### 🧠 Advanced Mental Health Features
+- **CBT Interactive Exercises:** Guided cognitive behavioral therapy activities
+  - Thought records and cognitive restructuring
+  - Behavioral activation planning
+  - Exposure hierarchy creation
+- **30-Day Mood Analysis:** Extended mood tracking with:
+  - Monthly trends and pattern recognition
+  - Correlation with activities, sleep, and weather
+  - Exportable PDF reports for therapists
+- **Advanced Sentiment Analysis:** NLP-powered emotion detection
+  - Multi-dimensional emotion tracking (joy, sadness, anxiety, anger)
+  - Sentiment trends over time
+  - Early warning system for mood deterioration
 
-# Install dependencies
-pip install -r requirements.txt
+### 🔐 Security & Privacy Enhancements
+- **Client-Side Encryption:** End-to-end encryption for all messages
+  - Zero-knowledge architecture
+  - User-controlled encryption keys
+- **Two-Factor Authentication (2FA):** Enhanced account security
+- **Data Export & Deletion:** GDPR-compliant user data management
+- **Anonymization Features:** Pseudonymous usage options
 
-# Configure environment
-cp .env.example .env
-# Edit .env with your OPENAI_API_KEY and DATABASE_URL
+### 🤖 AI & Personalization
+- **Fine-Tuned Mental Health Model:** Custom GPT model trained on:
+  - Mental health conversation datasets
+  - Crisis intervention best practices
+  - Therapeutic communication patterns
+- **RAG System Integration:** Context-aware responses using:
+  - Vector database of mental health resources
+  - Personalized coping strategy recommendations
+- **Voice Interaction:** Speech-to-text for accessibility
+- **Personalized Insights:** AI-generated weekly wellness summaries
 
-# Run server
-uvicorn app.main:app --reload
+### 📈 Analytics & Insights
+- **Advanced Dashboard:** Comprehensive mental wellness overview
+  - Mood patterns and triggers
+  - Chat engagement metrics
+  - Crisis event timeline
+- **Journaling Integration:** Free-form journaling with AI insights
+- **Goal Setting & Tracking:** Mental wellness objectives with progress monitoring
+
+### 🌐 Community & Resources
+- **Peer Support Forums:** Moderated community discussions (anonymous)
+- **Therapist Directory:** Vetted mental health professional matching
+- **Educational Content:** Mental health literacy articles and videos
+- **Crisis Intervention Training:** Resources for helping others
+
+### 🔧 Technical Improvements
+- **A/B Testing Framework:** Model performance comparison
+- **Email Notifications:** Daily reminders, mood check-ins, crisis alerts
+- **CI/CD Pipeline:** GitHub Actions for automated testing and deployment
+- **Monitoring & Observability:** Sentry for error tracking, analytics dashboards
+- **WebSocket Support:** Real-time chat with typing indicators
+- **API Rate Limit Tiers:** Premium features for power users
+
+---
+
+## 🏛️ Project Architecture
+
 ```
-
-Backend runs on `http://127.0.0.1:8000`
-
-### Frontend Setup
-```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Configure environment
-cp .env.local.example .env.local
-# Edit .env.local with NEXT_PUBLIC_API_URL
-
-# Run dev server
-npm run dev
-```
-
-Frontend runs on `http://localhost:3000`
-
----
-
-## 🧪 Testing
-```bash
-cd backend
-pytest tests/ -v
-
-# Performance testing
-python test_performance.py
-```
-
-**Test Results:**
-- 7/7 tests passing ✅
-- Health check, mood logging, analytics covered
-- SQLite test database (no internet needed)
-
----
-
-## 📚 Documentation
-
-- **[Setup Guide](SETUP.md)** - Complete development setup
-- **[API Documentation](API.md)** - Endpoint reference
-- **[Contributing Guide](CONTRIBUTING.md)** - How to contribute
-
----
-
-## 🗂️ Project Structure
-```
-neurobud/
-├── backend/
+NeuroBud/
+├── backend/                    # FastAPI backend
 │   ├── app/
-│   │   ├── ai/              # AI engines (chat, crisis detection)
-│   │   ├── database/        # Database connection
-│   │   ├── models/          # SQLAlchemy models
-│   │   ├── utils/           # Utilities (sanitizer, cleanup)
-│   │   ├── middleware/      # Request logging
-│   │   └── main.py          # FastAPI app
-│   ├── tests/               # pytest tests
-│   ├── requirements.txt     # Python dependencies
-│   └── .env.example         # Environment template
-├── frontend/
+│   │   ├── ai/                # AI engines (chat, crisis detection)
+│   │   ├── database/          # Database connection & session management
+│   │   ├── models/            # SQLAlchemy models (User, Conversation, Mood, Crisis)
+│   │   ├── utils/             # Utilities (sanitizer, validators)
+│   │   ├── middleware/        # Request logging, auth middleware
+│   │   └── main.py            # FastAPI app entry point
+│   ├── tests/                 # pytest test suite
+│   └── requirements.txt       # Python dependencies
+├── frontend/                   # Next.js frontend
 │   ├── app/
-│   │   ├── chat/            # Chat page
-│   │   ├── mood/            # Mood tracker
-│   │   ├── resources/       # Resources page
-│   │   └── page.js          # Landing page
-│   ├── package.json         # Node dependencies
-│   └── .env.local.example   # Environment template
-├── SETUP.md                 # Setup instructions
-├── API.md                   # API documentation
-├── CONTRIBUTING.md          # Contribution guidelines
-└── README.md                # This file
+│   │   ├── chat/              # AI chat interface
+│   │   ├── mood/              # Mood tracker page
+│   │   ├── resources/         # Mental health resources
+│   │   ├── admin/             # Admin dashboard
+│   │   └── api/auth/          # NextAuth.js API routes
+│   └── package.json           # Node.js dependencies
+└── README.md                   # This file
 ```
-
----
-
-## 🔐 Security Features
-
-- ✅ Input sanitization (XSS, null bytes, script tags)
-- ✅ Rate limiting per IP address
-- ✅ SQL injection prevention (ORM)
-- ✅ Request validation with Pydantic
-- ✅ CORS configuration
-- ✅ Error handling and logging
-- ✅ Database connection pooling
 
 ---
 
 ## 🎨 Screenshots
 
 ### Landing Page
-*Professional hero section with clear CTA buttons*
+*Professional hero section with clear CTAs and mental health disclaimers*
 
 ### AI Chat Interface
-*Real-time empathetic conversations with crisis detection*
+*Real-time empathetic conversations with crisis detection alerts*
 
 ### Mood Tracker
-*Daily mood logging with 7-day history visualization*
+*Daily mood logging with 7-day history visualization using Recharts*
 
 ### Resources Page
-*Crisis hotlines and CBT coping strategies*
+*Comprehensive list of crisis hotlines and CBT coping strategies*
 
----
-
-## 📈 Roadmap
-
-### Week 2 (Days 8-14)
-- [ ] User authentication (OAuth 2.0)
-- [ ] Fine-tuned GPT model for mental health
-- [ ] RAG system with Qdrant vector database
-- [ ] Advanced sentiment analysis
-- [ ] A/B testing framework
-- [ ] Email notifications
-
-### Week 3 (Days 15-21)
-- [ ] Production deployment (Vercel + Railway)
-- [ ] CI/CD pipeline (GitHub Actions)
-- [ ] Monitoring & analytics (Sentry)
-- [ ] User feedback system
-- [ ] Mobile responsiveness optimization
-- [ ] Final portfolio polish
+### Admin Dashboard
+*Analytics, user management, and model configuration interface*
 
 ---
 
 ## 🤝 Contributing
 
-Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
+We welcome contributions from developers, mental health professionals, and advocates! Whether it's:
+- Fixing bugs
+- Improving crisis detection algorithms
+- Adding new coping strategies
+- Enhancing UI/UX
+- Writing documentation
 
-### Development Workflow
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
+Please read our [CONTRIBUTING.md](CONTRIBUTING.md) guidelines before submitting pull requests.
 
 ---
 
 ## 📝 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the **MIT License**.
+
+```
+MIT License
+
+Copyright (c) 2025 Nishanth Ayyalasomayajula
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+**Note:** This software is intended for supportive purposes only and should not be used as a substitute for professional medical advice, diagnosis, or treatment.
 
 ---
 
@@ -260,52 +293,63 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 **Nishanth Ayyalasomayajula**
 
 - GitHub: [@nishanth1104](https://github.com/nishanth1104)
-- LinkedIn: [Nishanth Ayyalasomayajula](https://linkedin.com/in/your-profile)
-- Portfolio: [your-portfolio.com](https://your-portfolio.com)
+- LinkedIn: [Nishanth Ayyalasomayajula](https://linkedin.com/in/nishanth-ayyalasomayajula)
+- Email: nishanthayyalasomayajula@gmail.com
 
 ---
 
 ## 🙏 Acknowledgments
 
-- OpenAI for GPT-4o-mini API
-- FastAPI for the excellent web framework
-- Next.js for the React framework
-- Supabase for database hosting
-- Crisis Text Line and 988 Lifeline for resources
+- **OpenAI** for GPT-4o-mini API enabling empathetic conversations
+- **FastAPI** for the high-performance web framework
+- **Next.js** for the React framework and excellent developer experience
+- **Supabase** for PostgreSQL hosting and real-time capabilities
+- **988 Lifeline & Crisis Text Line** for crisis intervention resources
+- **Mental Health America & NAMI** for educational resources
+- **Open-source community** for the amazing tools and libraries
 
 ---
 
 ## ⚖️ Ethical Considerations
 
-**Neurobud is built with mental health ethics in mind:**
+NeuroBud is built with mental health ethics at its core:
 
-- ✅ Clear disclaimers that it's not therapy
-- ✅ Multiple crisis intervention touchpoints
-- ✅ No data collection without consent
-- ✅ Transparent about AI limitations
-- ✅ Privacy-first design
-- ✅ Responsible AI usage
+✅ **Transparency:** Clear disclaimers that it's AI, not therapy
+✅ **Crisis Intervention:** Multiple touchpoints connecting users to 988 Lifeline
+✅ **Privacy:** User data handled with care, minimal collection
+✅ **No Medical Claims:** Never positioned as medical treatment
+✅ **Responsible AI:** Prompts engineered to avoid harmful advice
+✅ **Accessibility:** Free and open-source for maximum reach
 
-**If you're experiencing a mental health crisis, please seek professional help immediately.**
+**Mental health is a human right.** This project respects the gravity of mental wellness and aims to complement, not replace, professional care.
 
 ---
 
-## 📊 Project Stats
+## 📊 Project Statistics
 
-- **Lines of Code:** ~4,000+
-- **API Endpoints:** 6
-- **Database Tables:** 4
-- **Frontend Pages:** 4
+- **Version:** 1.0 (Production Ready)
+- **Lines of Code:** ~5,500+
+- **API Endpoints:** 10+
+- **Database Tables:** 5 (User, Conversation, Message, Mood, CrisisEvent)
+- **Frontend Pages:** 6 (Home, Chat, Mood, Resources, Admin, Sign In)
 - **Tests:** 7 (100% passing)
-- **Performance:** <20ms average response time
-- **Development Time:** 7 days (MVP)
+- **Performance:** <20ms average API response time
+- **Development Time:** 3 weeks (MVP + Auth + Admin)
 
 ---
 
-## 🌟 Star History
+## 🌟 Star This Project
 
-If you find Neurobud helpful, please consider giving it a star! ⭐
+If NeuroBud resonates with you or you believe in accessible mental health support, please consider:
+- Giving this repository a star
+- Sharing it with others who might benefit
+- Contributing to its development
+- Providing feedback and suggestions
+
+Together, we can make mental wellness support more accessible to everyone.
 
 ---
 
-**Built with ❤️ for mental wellness**
+**Built with care for mental wellness by Nishanth Ayyalasomayajula**
+
+*Remember: You are not alone. Help is available. Recovery is possible.*
