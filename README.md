@@ -91,7 +91,7 @@ NeuroBud was built to bridge the gap between crisis moments and professional car
 
 ### Backend
 - **Framework:** FastAPI 0.104+ (Python 3.12)
-- **Database:** PostgreSQL (Supabase) with SQLAlchemy 2.0 ORM
+- **Database:** SQLite with SQLAlchemy 2.0 ORM
 - **AI Engine:** OpenAI GPT-4o-mini API
 - **Authentication:** NextAuth.js integration
 - **Rate Limiting:** SlowAPI (IP-based throttling)
@@ -110,7 +110,7 @@ NeuroBud was built to bridge the gap between crisis moments and professional car
 
 ### DevOps & Infrastructure
 - **Version Control:** Git & GitHub
-- **Database Hosting:** Supabase (PostgreSQL)
+- **Database Hosting:** SQLite
 - **Backend Hosting:** Railway
 - **Frontend Hosting:** Vercel
 - **Environment Management:** python-dotenv, .env files
@@ -227,32 +227,23 @@ NeuroBud/
 ## 🎨 Screenshots
 
 ### Landing Page
-*Professional hero section with clear CTAs and mental health disclaimers*
+<img width="1895" height="959" alt="image" src="https://github.com/user-attachments/assets/25be4e35-bff1-4ca7-addb-57e904bfd762" />
+
 
 ### AI Chat Interface
-*Real-time empathetic conversations with crisis detection alerts*
+<img width="1915" height="958" alt="image" src="https://github.com/user-attachments/assets/267e2a4c-e83a-43af-82b6-90b63c40e6b2" />
+
 
 ### Mood Tracker
-*Daily mood logging with 7-day history visualization using Recharts*
+<img width="1772" height="948" alt="image" src="https://github.com/user-attachments/assets/6e8ad099-89d1-4aa1-a63d-c0976950fc05" />
+
 
 ### Resources Page
-*Comprehensive list of crisis hotlines and CBT coping strategies*
+<img width="1348" height="940" alt="image" src="https://github.com/user-attachments/assets/ad852864-5ae7-45d3-9ff7-90d4784c4176" />
+<img width="1324" height="937" alt="image" src="https://github.com/user-attachments/assets/8cf1a075-7a10-482c-86b8-4bf6b2ea98db" />
+<img width="1384" height="729" alt="image" src="https://github.com/user-attachments/assets/aee9b5fd-c612-48b2-8894-a5e3194679ea" />
 
-### Admin Dashboard
-*Analytics, user management, and model configuration interface*
 
----
-
-## 🤝 Contributing
-
-We welcome contributions from developers, mental health professionals, and advocates! Whether it's:
-- Fixing bugs
-- Improving crisis detection algorithms
-- Adding new coping strategies
-- Enhancing UI/UX
-- Writing documentation
-
-Please read our [CONTRIBUTING.md](CONTRIBUTING.md) guidelines before submitting pull requests.
 
 ---
 
@@ -303,7 +294,7 @@ SOFTWARE.
 - **OpenAI** for GPT-4o-mini API enabling empathetic conversations
 - **FastAPI** for the high-performance web framework
 - **Next.js** for the React framework and excellent developer experience
-- **Supabase** for PostgreSQL hosting and real-time capabilities
+- **Supabase** for SQLite hosting and real-time capabilities
 - **988 Lifeline & Crisis Text Line** for crisis intervention resources
 - **Mental Health America & NAMI** for educational resources
 - **Open-source community** for the amazing tools and libraries
